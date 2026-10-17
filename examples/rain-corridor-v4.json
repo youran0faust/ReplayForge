@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 4,
+  "id": "project_rain_corridor",
+  "title": "雨夜走廊 P1 样例",
+  "design": {"width": 960, "height": 540, "fps": 30},
+  "locale": "zh-CN",
+  "scene": {
+    "id": "scene_corridor_001",
+    "durationFrames": 438,
+    "background": {"kind": "image", "color": "#182338", "resourceId": "bg_rain_corridor"},
+    "characters": [
+      {"id": "char_alice", "definitionId": "def_char_alice", "x": 180, "y": 100, "width": 240, "height": 360, "visibleFrom": 0, "visibleTo": 438}
+    ],
+    "dialogues": [
+      {
+        "id": "dlg_alice_001",
+        "speakerId": "def_char_alice",
+        "text": {"zh-CN": "门后传来了声音。你们停下了脚步。", "ja-JP": "ドアの向こうから音がした。", "en-US": "There was a sound behind the door."},
+        "startFrame": 30,
+        "endFrame": 180,
+        "revealFrames": 90,
+        "voiceClips": [
+          {"resourceId": "voice_alice_001", "durationSamples": 432000, "id": "voice_dlg_alice_001", "sampleRate": 48000, "sourceOffsetSamples": 0, "binding": {"dialogueId": "dlg_alice_001", "mode": "follow", "followOffsetFrames": 0}}
+        ],
+        "displayUntilFrame": 180,
+        "fullText": {"zh-CN": "门后传来了声音。你们停下了脚步。", "ja-JP": "ドアの向こうから音がした。", "en-US": "There was a sound behind the door."},
+        "pages": [
+          {"id": "page_dlg_alice_001", "startFrame": 30, "endFrame": 180, "revealFrames": 90, "text": {"zh-CN": "门后传来了声音。你们停下了脚步。", "ja-JP": "ドアの向こうから音がした。", "en-US": "There was a sound behind the door."}}
+        ]
+      }
+    ]
+  },
+  "resources": [
+    {"mime": "image/svg+xml", "path": "assets/rain-corridor.svg", "id": "bg_rain_corridor", "kind": "image"},
+    {"mime": "image/svg+xml", "path": "assets/alice.svg", "id": "alice_portrait", "kind": "image"},
+    {"mime": "audio/wav", "path": "assets/alice-voice.wav", "id": "voice_alice_001", "sampleRate": 48000, "kind": "audio"}
+  ],
+  "characterDefinitions": [
+    {"id": "def_char_alice", "name": "Alice", "color": "#d58b9c", "resourceId": "alice_portrait"}
+  ]
+}

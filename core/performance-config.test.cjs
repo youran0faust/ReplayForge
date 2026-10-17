@@ -1,0 +1,5 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {DEFAULTS,KEYS,resolvePerformanceConfig,validatePerformanceConfig}=require('./performance-config.cjs');
+test('central defaults remain pure and are not injected into old config',()=>{const c={version:1,characters:[]};assert.deepEqual(validatePerformanceConfig(c),[]);assert.deepEqual(resolvePerformanceConfig(c),DEFAULTS);assert.deepEqual(c,{version:1,characters:[]});});
+test('strict bounded seconds and nonzero title total',()=>{for(const key of KEYS)for(const value of [NaN,Infinity,-1,3601,'1',null])assert.ok(validatePerformanceConfig({[key]:value}).length,key);assert.ok(validatePerformanceConfig({characterFadeSeconds:0}).length);assert.ok(validatePerformanceConfig({screenFadeSeconds:0}).length);assert.ok(validatePerformanceConfig({titleFadeInSeconds:0,titleHoldSeconds:0,titleFadeOutSeconds:0}).length);assert.deepEqual(validatePerformanceConfig({titleFadeInSeconds:0,titleHoldSeconds:1,titleFadeOutSeconds:0,bgmFadeOutSeconds:0}),[]);});

@@ -1,0 +1,12 @@
+﻿'use strict';
+const assert=require('node:assert/strict');
+const {describePortrait}=require('./portrait-compositor.js');
+const character={id:'c',resourceId:'base',width:240,height:220,portraitCanvas:{width:400,height:200},portraitLayers:[{id:'skin',resourceId:'skin',x:40,y:20,width:120,height:100},{id:'eyes',resourceId:'eyes',x:80,y:60,width:40,height:20}]};
+const snapshot=JSON.stringify(character), d=describePortrait(character);
+assert.equal(d.legacy,false); assert.deepEqual(d.canvas,{width:400,height:200});
+assert.deepEqual(d.layers.map(x=>x.id),['skin','eyes']);
+assert.deepEqual(d.layers[0],{id:'skin',resourceId:'skin',x:40,y:20,width:120,height:100});
+assert.equal(JSON.stringify(character),snapshot,'describePortrait must not mutate input');
+const legacy={resourceId:'base',width:240,height:220}; assert.deepEqual(describePortrait(legacy),{legacy:true,base:'base',canvas:null,layers:[]});
+assert.deepEqual(describePortrait({portraitCanvas:{width:10,height:20},portraitLayers:[]}),{legacy:false,base:null,canvas:{width:10,height:20},layers:[]});
+console.log(JSON.stringify({status:'PASS',checks:['canvas geometry','ordered transparent layers','legacy fallback','no mutation']}));

@@ -1,0 +1,24 @@
+'use strict';
+const {app}=require('electron'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.join(__dirname,'test-output','expression-event-drag-'+require('node:crypto').randomUUID());fs.mkdirSync(root,{recursive:true});process.env.REPLAY_RECOVERY_DIR=path.join(root,'recovery');app.disableHardwareAcceleration();
+app.once('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',async()=>{try{
+ const js=s=>win.webContents.executeJavaScript(s),wait=async(f,label)=>{for(let i=0;i<300;i++){if(await f())return;await new Promise(r=>setTimeout(r,20));}throw Error('timeout: '+label);};
+ win.show();win.focus();await wait(()=>js(`!!document.querySelector('#character-select')?.value && !!current`),'startup');
+ const fixture=await js(`(async()=>{const cid=document.querySelector('#character-select').value;const c=(await replay.project()).project.scene.characters.find(c=>c.id===cid);for(const e of c.expressionEvents||[])await replay.deleteExpressionEvent(cid,e.id);const a=await replay.addExpressionEvent(cid,{frame:30,expressionId:null});const b=await replay.addExpressionEvent(cid,{frame:60,expressionId:null});await locate();return{cid,id:a.id,otherId:b.id};})()`);
+ const selector=`.timeline-expression-marker[data-id="${fixture.id}"]`;
+ async function snapshot(){return js(`(async()=>{const p=await replay.project();return {revision:p.revision,project:p.project};})()`);}
+ async function beginDrag(to){
+  await js(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center',inline:'nearest'})`);
+  const p=await js(`(()=>{const m=document.querySelector(${JSON.stringify(selector)}),r=m.getBoundingClientRect(),l=m.closest('.timeline-lane').getBoundingClientRect(),extent=Number(document.querySelector('#timeline').dataset.extent),from=Number(m.dataset.startFrame),x=Math.round(r.left+r.width/2),y=Math.round(r.top+r.height/2),dx=Math.round((${to}-from)*l.width/extent),hit=document.elementFromPoint(x,y)?.closest('.timeline-expression-marker');return{x,y,dx,width:r.width,height:r.height,hit:hit?.dataset.id,expected:Math.round(from+dx/l.width*extent)};})()`);
+  assert.ok(p.width>0&&p.height>0);assert.equal(p.hit,fixture.id);assert.equal(p.expected,to);
+  win.webContents.sendInputEvent({type:'mouseMove',x:p.x,y:p.y});win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x:p.x,y:p.y});await wait(()=>js(`timelineDrag?.id===${JSON.stringify(fixture.id)}`),'pointerDown');
+  win.webContents.sendInputEvent({type:'mouseMove',x:p.x+p.dx,y:p.y,modifiers:['leftButtonDown']});await wait(()=>js(`timelineDrag?.result?.frame===${to} && !!document.querySelector('.timeline-ghost')`),'ghost');return p;
+ }
+ async function endDrag(p){win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:p.x+p.dx,y:p.y});await wait(()=>js('!timelineDrag && !timelineCommitting'),'commit');}
+ const before=await snapshot();await endDrag(await beginDrag(40));const moved=await snapshot();const event=p=>p.project.scene.characters.find(c=>c.id===fixture.cid).expressionEvents.find(e=>e.id===fixture.id);
+ assert.equal(event(moved).frame,40);assert.equal(event(moved).expressionId,null);assert.equal(moved.revision,before.revision+1);
+ await js(`document.querySelector('#undo').onclick()`);assert.deepEqual((await snapshot()).project,before.project);await js(`document.querySelector('#redo').onclick()`);assert.deepEqual((await snapshot()).project,moved.project);
+ const conflictBefore=await snapshot();await endDrag(await beginDrag(60));assert.deepEqual(await snapshot(),conflictBefore);assert.match(await js(`document.querySelector('#log').textContent`),/帧已存在/);
+ const p=await beginDrag(50);win.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});win.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});await wait(()=>js('!timelineDrag'),'Escape');win.webContents.sendInputEvent({type:'mouseUp',button:'left',x:p.x+p.dx,y:p.y});assert.deepEqual(await snapshot(),conflictBefore);assert.equal(await js(`!!document.querySelector('.timeline-ghost')`),false);
+ const report={status:'PASS',checks:['native exact marker drag 30 to 40','actual marker hit-test','lane scale exact target','ghost exact frame','expressionId preserved','undo redo','same-frame conflict atomic rejection','Escape cancellation']};fs.writeFileSync(path.join(__dirname,'test-output/gui-expression-event-drag.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(0);
+ }catch(error){console.error(error);app.exit(1)}}));setTimeout(()=>{console.error('expression drag timeout');app.exit(1)},60000).unref();require('./main.cjs');const profile=path.join(root,'profile');fs.mkdirSync(profile,{recursive:true});app.setPath('userData',profile);app.setPath('sessionData',profile);

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>Replay Studio · P2</title>
+<link rel="stylesheet" href="scene.css">
+<style>
+#timeline-body{position:relative}#timeline-playhead{position:absolute;top:0;bottom:0;width:12px;margin-left:-6px;z-index:4;cursor:ew-resize;touch-action:none}#timeline-playhead::before{content:'';position:absolute;left:5px;top:0;bottom:0;width:2px;background:white}#timeline-playhead-thumb{display:block;width:12px;height:10px;background:white;clip-path:polygon(0 0,100% 0,100% 50%,50% 100%,0 50%)}
+#timeline{cursor:crosshair}.timeline-item{touch-action:none}.timeline-handle-start,.timeline-handle-end{position:absolute;top:0;bottom:0;width:7px;z-index:1;cursor:ew-resize}.timeline-handle-start{left:0}.timeline-handle-end{right:0}.timeline-ghost{pointer-events:none;opacity:.65;border-style:dashed;background:#89a9cc}
+#timeline-ruler{display:flex;justify-content:space-between;border-bottom:1px solid #627083;padding-bottom:5px;font-size:11px}
+.timeline-lane{position:relative;background:#252d38;margin:3px 0;overflow:hidden}
+.timeline-item{position:absolute;height:24px;min-width:3px;padding:2px 5px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #91abc8;background:#345377;color:white;text-align:left;cursor:pointer}.timeline-waveform{position:absolute;inset:0;width:100%;height:100%;opacity:.7;pointer-events:none;z-index:0}.timeline-item>.timeline-label-text{position:relative;z-index:1}
+.timeline-item[data-kind="characters"]{background:#365d49}.timeline-item[data-kind="audio"]{background:#61497b}.timeline-item.warning{border:2px solid #ffbe66}.timeline-expression-marker{position:absolute;top:0;bottom:0;width:8px;margin-left:-4px;background:#ffd166;border-radius:2px;cursor:ew-resize;z-index:3;box-shadow:0 0 0 1px #403719}.timeline-expression-marker:hover{background:#fff0a3}
+#timeline-warnings{white-space:pre-line;color:#ffbe66;font-size:12px}#timeline-frame{font-variant-numeric:tabular-nums}.timeline-label{font-size:12px;color:#aebdcd}.file-status{padding:8px 10px;border:1px solid #53657a;border-radius:4px;color:#ffd166;background:#222b36;overflow-wrap:anywhere}.file-status.saved{color:#9de2b0;border-color:#477957}
+.side h1{font-size:18px}
+.side input,.side select{width:90px}.row{margin:12px 0}.muted{color:#9ca9b8}
+.buttons button{margin:3px 2px}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.image-editor{min-width:0}.side #character-select,.side #dialogue-speaker{width:100%;margin-top:4px}#image-info{white-space:pre-line;overflow-wrap:anywhere}.image-editor button{margin:2px}.side input[type="checkbox"]{width:auto}.side #character-name{width:100%;box-sizing:border-box}
+#expression-editor{min-width:0;margin:12px 0}#expression-editor select,#expression-name{width:100%;box-sizing:border-box}#expression-preview img{display:block;max-width:100%;max-height:180px;object-fit:contain}#expression-preview-info{white-space:pre-line;overflow-wrap:anywhere}
+#expression-preview{position:relative;width:240px;height:220px;max-width:100%;margin:12px auto;background:repeating-conic-gradient(#39414c 0% 25%,#242b34 0% 50%) 0/16px 16px;overflow:hidden;display:flex;align-items:flex-end;justify-content:center}#expression-preview img{max-height:220px}#expression-preview [data-layer-id].selected-layer{outline:2px solid #ffd166;outline-offset:-2px}#expression-draft-status{margin-top:10px;color:#ffd166}
+.timeline-group{position:absolute;border:1px solid #b2a2de;border-radius:4px;box-sizing:border-box;height:50px;background:#312d44;overflow:hidden}.timeline-group-header{position:absolute;left:0;top:0;height:21px;width:100%;border:0;background:#53456b;color:white;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer}.timeline-group .timeline-page{top:23px;height:24px}.timeline-item.selected,.timeline-group-header.selected{outline:2px solid #ffd166;outline-offset:-2px;background:#716026}.timeline-group:has(.selected){border-color:#ffd166}#timeline-split{margin:5px 8px 5px 0}
+.timeline-group-header{touch-action:none;cursor:grab}.timeline-expression-marker{position:absolute;top:0;bottom:0;width:8px;margin-left:-4px;background:#ffd166;border-radius:2px;cursor:grab;z-index:3}.timeline-expression-marker:hover{background:#fff0a3}.timeline-group-edge{z-index:3;background:rgba(210,200,240,.22)}.timeline-divider{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:ew-resize;background:rgba(255,255,255,.3);z-index:2}.timeline-ghost{z-index:5}
+#external-file-drop-panel{min-width:0;overflow-wrap:anywhere}#external-file-drop-panel label{display:block;margin:5px 0}#external-file-drop-panel input:not([type=checkbox]),#external-file-drop-panel select{max-width:100%;box-sizing:border-box}#external-file-drop-panel fieldset{min-width:0}#external-file-drop-panel pre{max-height:300px;overflow:auto;overflow-wrap:anywhere}#external-file-drop-summary{border-left:3px solid #ffd166;padding-left:6px}#external-file-drop-status{color:#ffd166}
+#script-preflight-editor{min-width:0;margin:0;padding:8px;overflow-wrap:anywhere}#script-preflight-editor button{white-space:normal;max-width:100%;margin:3px 2px}#script-preflight-editor select{width:100%;max-width:100%;box-sizing:border-box}#script-preflight-editor ul{padding-left:18px}#script-preflight-dialogues button{width:100%;text-align:left;overflow-wrap:anywhere}#script-preflight-status{color:#ffd166}#script-preflight-editor p{white-space:pre-wrap}
+</style>
+<link rel="stylesheet" href="editor-layout.css">
+<link rel="stylesheet" href="reading-settings.css">
+<link rel="stylesheet" href="dialogue-reading-editor.css">
+<header id="app-titlebar"><strong>REPLAY / STUDIO</strong><span class="muted">P2 · 场景编辑器</span><span class="title-spacer"></span><button id="reading-settings-open" type="button">阅读与分页</button><button id="layout-reset" type="button">恢复布局</button><details id="project-details"><summary>工程状态 / 详情</summary><div id="project-details-content"></div></details></header>
+<nav id="app-menubar" aria-label="工程操作"></nav>
+<div class="app workspace">
+  <aside id="asset-library" class="panel assets" aria-label="工程素材"><div class="panel-title">项目与素材</div><div id="asset-list" class="assetbody"></div></aside>
+    <div class="preview-panel"><main class="preview"><div id="stage" class="stage"></div></main><div id="transport"><button id="play" type="button">播放</button><button id="pause" type="button">暂停</button><button id="stop" type="button">停止</button> <span id="playback-status">stopped</span><input id="scrub" type="range" min="0" max="437" value="0" style="width:100%"><div class="muted">空格播放/暂停；停止回到第0帧。预览混音不等同导出限幅。</div></div></div>
+    <section id="timeline" aria-label="时间轴">
+      <div id="timeline-toolbar" role="toolbar" aria-label="时间轴编辑工具">
+        <div id="timeline-toolbar-title" title="单击选择，双击定位；标尺定位；拖组头移动，拖边缘调整长度">时间轴 · 帧 <output id="timeline-frame">0</output></div>
+        <div id="timeline-toolbar-actions"><button id="timeline-split" type="button" disabled>在播放头切分 (S)</button><button id="timeline-undo" type="button" disabled>撤销</button><button id="timeline-redo" type="button" disabled>重做</button></div>
+        <div id="timeline-toolbar-status" role="status" aria-live="polite"><span id="timeline-selection-status" class="muted">先选择对白、页或独立音轨；组头可选择整个组。音轨切分共享原素材，不复制 WAV。</span></div>
+      </div>
+      <div id="timeline-scroll"><div id="timeline-body"><div id="timeline-ruler"></div><div id="timeline-tracks"></div><div id="timeline-playhead" role="slider" aria-label="播放头" aria-valuemin="0" aria-valuenow="0"><span id="timeline-playhead-thumb"></span></div></div>
+      <div id="timeline-warnings" role="status"></div></div>
+    </section>
+  <aside class="side right" aria-label="上下文编辑">
+    <section id="visual-panel" class="panel editor" aria-label="画面编辑">
+      <div class="panel-title">画面 <span><button id="context-pin" type="button" aria-pressed="false">锁定</button><button id="context-pending" type="button" hidden>打开待选</button><button data-layout-focus="visual" type="button" title="聚焦 / 恢复画面">↕</button></span></div>
+      <nav class="tabs" aria-label="画面页签"><button data-visual-tab="character" type="button">角色属性</button><button data-visual-tab="background" type="button">背景</button><button data-visual-tab="characterEvents" type="button">角色事件</button><button data-visual-tab="characterAppearance" type="button">角色外观</button><button data-visual-tab="expressions" type="button">表情库</button><button data-visual-tab="resource" type="button">资源</button><button data-visual-tab="code" type="button">代码</button></nav>
+      <div id="visual-content" class="content">
+        <section id="expression-library" hidden aria-label="本场景角色的表情"><div class="library-tools"><strong id="expression-library-title">本场景角色的表情</strong><div><button id="expression-library-apply" type="button" disabled>应用到当前帧</button><button id="expression-library-jump" type="button" disabled>跳到最近落点</button></div><div id="expression-library-status" class="muted" role="status">选择角色后浏览；资源浏览不会改变舞台。</div><button type="button" data-visual-tab="characterAppearance">编辑角色外观 →</button><button type="button" data-visual-tab="characterEvents">编排角色事件 →</button></div><div id="expression-library-grid" class="expression-list"></div></section>
+        <section id="background-editor-host" hidden aria-label="场景背景"><h3>背景</h3><p class="muted">基础背景用于首个背景事件之前；背景切换事件按时间轴生效。</p><div id="background-image-info" class="muted" role="status"></div></section>
+        <section id="character-event-editor-host" hidden aria-label="角色实例事件"><h3>角色事件</h3><p id="character-event-owner" class="muted">先在时间轴或左侧选择角色实例。</p><button type="button" data-visual-tab="character">返回角色属性</button><fieldset id="character-expression-events"><legend>表情切换事件</legend></fieldset><button id="character-event-discard" type="button" disabled>放弃事件修改</button><div id="character-event-status" class="muted" role="status"></div><p class="muted">表情定义决定“换成什么”，事件决定“从哪一帧开始换”。整图表情替换完整立绘；局部叠加表情保留基础立绘并叠加透明图层。切换表情不会改变实例位置、尺寸或出场时间。表情、显隐和位置事件作用于当前场景实例，不修改共享角色模板。</p><button type="button" data-visual-tab="code">查看工程JSON</button></section>
+        <section id="character-appearance-host" hidden aria-label="角色外观编辑"><h3>角色外观</h3><p class="muted">旧工程在这里编辑表情定义；启用共享模板的工程请到角色库编辑，角色事件不在这里。</p><button id="character-appearance-library" type="button">打开共享角色库</button></section>
+        <section id="resource-inspector" hidden aria-label="资源信息"><p class="muted">选择左侧资源以查看文件信息；资源不是场景实例。</p></section>
+      </div>
+      <button class="collapsed-summary" data-layout-restore type="button" hidden>画面编辑 · 点击恢复</button>
+    </section>
+    <section id="audio-panel" class="panel editor" aria-label="对白与声音">
+      <div class="panel-title">对白与声音 <button data-layout-focus="audio" type="button" title="聚焦 / 恢复声音">↕</button></div>
+      <nav class="tabs" aria-label="声音页签"><button data-audio-tab="dialogue" type="button">对白</button><button data-audio-tab="pages" type="button">分页</button><button data-audio-tab="voice" type="button">配音</button><button data-audio-tab="audio" type="button">独立音轨</button><button data-audio-tab="range" type="button">区间预览</button></nav>
+      <div id="dialogue-context-controls"><div id="audio-shared-context-note" class="muted">上方当前对白用于对白、分页和配音导入；配音片段编辑以片段框标明的所属对白为准。切换页签保留输入。</div></div>
+      <div id="audio-content" class="content"><section id="dialogue-pages-host" hidden aria-label="对白分页"><h3>分页</h3></section><section id="voice-editor-host" hidden aria-label="对白配音"><h3>配音</h3></section></div>
+      <button class="collapsed-summary" data-layout-restore type="button" hidden>对白与声音 · 点击恢复</button>
+    </section>
+    <h1 hidden>Replay P2 编辑器</h1><div id="file-status" class="file-status" role="status">未保存工程</div><div id="meta" class="muted"></div>
+    <div class="row">语言 <select id="locale"><option>zh-CN</option><option>ja-JP</option><option>en-US</option></select></div>
+    <div class="buttons"><button id="undo">撤销</button><button id="redo">重做</button><button id="open">打开工程</button><button id="save">保存工程</button><button id="save-as">另存为</button><button id="export">导出当前工程 MP4</button><button id="export-cancel" type="button" disabled>取消导出</button><button id="export-resume" type="button">继续上次导出</button><button id="export-folder" type="button" disabled>打开成片位置</button></div>
+    <div class="row"><label for="export-mode">导出模式</label><select id="export-mode"><option value="1">低占用 · 1 worker</option><option value="2">后台 · 2 workers</option><option value="4" selected>均衡 · 4 workers</option><option value="8">极速 · 8 workers</option></select></div><p class="muted">默认均衡；极速模式建议至少 8 GiB 空闲内存。选择保存位置与文件名后开始，不覆盖已有成片。恢复使用上次快照。</p>
+    <fieldset class="dialogue-editor">
+      <legend>对白编辑</legend>
+      <div class="row">对白 <select id="dialogue-select"></select></div>
+      <div class="row dialogue-controls"><button id="dialogue-add" type="button">新增</button><button id="dialogue-delete" type="button">删除</button><label><input id="dialogue-delete-confirm" type="checkbox">确认删除</label><button id="dialogue-up" type="button">上移</button><button id="dialogue-down" type="button">下移</button></div>
+      <div class="row"><label for="dialogue-speaker">说话人</label><select id="dialogue-speaker" disabled></select><button id="dialogue-speaker-apply" type="button" disabled>应用说话人</button></div>
+      <div class="row" id="dialogue-page-editor"><label for="dialogue-page-select">对白页</label><select id="dialogue-page-select"></select><button id="dialogue-page-add" type="button">拆分新增页</button><button id="dialogue-page-delete" type="button">删除页</button><label><input id="dialogue-page-delete-confirm" type="checkbox">确认</label><button id="dialogue-page-discard" type="button">放弃本地修改</button><div id="dialogue-page-status" class="muted" role="status"></div><div class="muted">页按时间排列并连续覆盖对白。分页后开始帧及最后一页结束帧只读；调整其他页结束帧会联动下一页。文本编辑当前语言；说话人和配音属于整段对白，不随翻页重启。新增页默认在选中页中点拆分；结束帧调整会同步下一页起点。删除页会丢弃该页文本并把时段合并到邻页；勾选确认后点击删除。有未应用修改时会再次询问是否放弃，取消将保留修改。删除仅剩的一页会恢复默认单页。</div></div>
+      <section id="dialogue-fields" aria-label="当前对白页文本与时间"><p class="muted">这里编辑所选对白的当前页；已有分页时，请在“分页”页切换页。两处使用同一份输入，不会重复创建草稿。</p><label class="row">当前页文本<br><textarea id="dialogue-text" rows="4"></textarea></label>
+      <div class="row">开始帧 <input id="dialogue-start" type="number" min="0"><br>结束帧 <input id="dialogue-end" type="number" min="0"><br>揭示帧 <input id="dialogue-reveal" type="number" min="0"></div>
+      </section><div id="legacy-voice-controls" class="row"><p class="muted">下列导入及整段绑定操作作用于上方当前对白；配音片段编辑以片段选择框标明的所属对白为准。</p><div id="voice-info"></div><button id="voice-import" type="button">导入 WAV 并绑定</button><button id="voice-unbind" type="button">移除配音</button><br><button id="voice-binding-independent" type="button">解绑定（保留位置）</button><button id="voice-binding-preserve" type="button">重新绑定·保持位置</button><button id="voice-binding-align" type="button">重新绑定·对齐对白起点</button><div class="muted">仅 48kHz PCM16 WAV；导入会复制素材，移除配音不删除文件。解绑定只解除时间联动，保留同一对白的关联标记；重新绑定可保持偏移或对齐起点，不更换关联对白。绑定时需先解绑定才能拖动配音。</div></div>
+      <button id="dialogue-apply" type="button">应用对白</button>
+      <div class="muted">排序不改变时间；若对白重叠，列表靠前者优先显示。</div>
+    </fieldset>
+    <fieldset id="audio-track-editor"><legend>独立音轨</legend><div id="audio-track-timing-info" class="muted"></div><div class="row">音轨 <select id="audio-track-select"></select></div><div class="row"><label for="audio-track-kind">类型</label><select id="audio-track-kind"><option value="sfx">音效</option><option value="bgm">背景音乐</option></select><button id="audio-track-import" type="button">导入 WAV</button></div><div class="row"><label for="audio-track-name">名称</label><input id="audio-track-name" type="text"><br><label for="audio-track-start">开始帧</label><input id="audio-track-start" type="number" min="0"><br><label for="audio-track-gain">增益</label><input id="audio-track-gain" type="number" min="0" max="2" step="0.01"></div><div class="row"><button id="audio-track-apply" type="button">应用音轨</button><button id="audio-track-reset" type="button">丢弃表单</button><button id="audio-track-delete" type="button">删除</button><label><input id="audio-track-delete-confirm" type="checkbox">确认删除</label></div><div class="muted">仅 48kHz PCM16 WAV；时间轴拖动中间移动，拖动两端裁剪或恢复源音频（不变速、不循环）。类型仅用于新导入；导入使用当前开始帧。增益1为原音量，0为静音。</div></fieldset>
+    <fieldset><legend>区间预览（不保存到工程）</legend><label for="range-start">开始帧（含）</label><input id="range-start" type="number" min="0" step="1" disabled><br><label for="range-end">结束帧（不含 / exclusive）</label><input id="range-end" type="number" min="1" step="1" disabled><div class="buttons"><button id="range-play" type="button" disabled>播放区间</button><button id="range-dialogue" type="button" disabled>设为选中对白</button><button id="range-reset" type="button" disabled>整个场景</button></div></fieldset>
+    <div class="row">帧 <input id="frame" type="number" min="0" value="0"> <button id="apply">定位</button></div>
+    <fieldset id="code-editor"><legend>工程 JSON 代码</legend><label for="code-text">原始工程 JSON</label><br><textarea id="code-text" rows="12" style="width:100%;box-sizing:border-box;font-family:monospace"></textarea><div id="code-status" class="muted" role="status"></div><button id="code-apply" type="button">应用代码</button><button id="code-reset" type="button">重置</button><label><input id="code-reset-confirm" type="checkbox">确认丢弃草稿</label></fieldset>
+    <fieldset class="image-editor">
+      <legend>角色属性与出场范围</legend>
+      <div class="row"><button id="character-open-events" type="button">编排角色事件</button><button id="character-open-appearance" type="button">编辑角色外观</button><button id="character-open-library" type="button">打开角色库</button></div>
+      <div id="background-base-controls" class="row"><button id="background-import" type="button" disabled>导入背景</button><button id="background-unbind" type="button" disabled>解绑背景</button></div>
+      <div class="row"><label for="character-select">角色 </label><select id="character-select" disabled></select></div>
+      <div class="row"><button id="character-add" type="button" disabled>新增角色</button><button id="character-delete" type="button" disabled>删除角色</button><label><input id="character-delete-confirm" type="checkbox" disabled>确认删除</label><div class="muted">删除角色后，关联对白改为旁白；保留素材资源和文件。</div></div>
+      <div class="row"><label for="character-name">名称</label><input id="character-name" type="text" disabled></div>
+      <div class="row"><label for="character-width">宽度 </label><input id="character-width" type="number" min="1" disabled><br><label for="character-height">高度 </label><input id="character-height" type="number" min="1" disabled><br><label for="character-from">显示开始帧 </label><input id="character-from" type="number" min="0" disabled><br><label for="character-to">显示结束帧（不含）</label><input id="character-to" type="number" min="1" disabled></div>
+      <div class="row"><button id="character-import" type="button" disabled>导入立绘</button><button id="character-unbind" type="button" disabled>解绑立绘</button></div>
+      <div id="character-preview" aria-label="选中角色立绘预览">未选择角色</div>
+      <div id="character-preview-info" class="muted" role="status" aria-live="polite"></div>
+      <fieldset id="expression-editor"><legend>角色表情</legend>
+        <div class="muted">候选预览仅用于编辑，不改变舞台。整图替换使用一张完整立绘替代当前外观；局部叠加使用你提供的透明图层按画布坐标叠加到基础立绘，不会自动抠脸。表情事件只切换外观，不改变实例位置、尺寸与出场范围；导入图片本身不切换舞台表情。</div>
+        <div class="row"><label for="expression-select">表情</label><select id="expression-select" disabled></select></div>
+        <div class="row"><label for="expression-resource">图片</label><select id="expression-resource" disabled></select><br><label for="expression-name">名称</label><input id="expression-name" disabled></div>
+        <label for="expression-mode">模式</label><select id="expression-mode"><option value="replace">整图替换</option><option value="overlay">局部叠加</option></select>
+        <button id="expression-import" type="button">导入表情图片（独立资源）</button>
+        <div id="overlay-editor" hidden>
+          <div class="row">立绘画布（基础图片坐标）<br><label for="portrait-canvas-width">宽</label><input id="portrait-canvas-width" type="number" min="1"><label for="portrait-canvas-height">高</label><input id="portrait-canvas-height" type="number" min="1"><button id="portrait-canvas-apply" type="button">确认保存画布</button><div class="muted">确认画布保留表情草稿；未应用表单不自动恢复。工程变化时请先重新加载草稿。</div><div id="portrait-canvas-status" class="muted" role="status"></div></div>
+          <label for="layer-select">图层（从底到顶）</label><select id="layer-select"></select>
+          <div><button id="layer-add" type="button">添加图层</button><button id="layer-remove" type="button">移除</button><button id="layer-up" type="button">上移（向底）</button><button id="layer-down" type="button">下移（向顶）</button></div>
+          <label for="layer-resource">图层图片</label><select id="layer-resource"></select><button id="layer-import" type="button">导入图层图片</button>
+          <div><label for="layer-x">X</label><input id="layer-x" type="number" step="any"><label for="layer-y">Y</label><input id="layer-y" type="number" step="any"><label for="layer-width">宽</label><input id="layer-width" type="number" min="0.01" step="any"><label for="layer-height">高</label><input id="layer-height" type="number" min="0.01" step="any"><button id="layer-native" type="button">使用图片原始尺寸</button><div id="layer-native-info" class="muted"></div></div>
+        </div>
+        <div id="expression-draft-status" class="muted" role="status">本地表单；修改后请应用。未应用内容不自动恢复。</div><button id="expression-discard" type="button" disabled>丢弃草稿并重新加载</button>
+        <div id="expression-preview" aria-label="表情候选图片预览">未选择图片</div><div id="expression-preview-info" class="muted" role="status"></div>
+        <div class="row"><button id="expression-add" type="button" disabled>注册表情</button><button id="expression-apply" type="button" disabled>应用表情</button><button id="expression-delete" type="button" disabled>删除表情</button><label><input id="expression-delete-confirm" type="checkbox" disabled>确认删除</label></div>
+        <div class="muted">删除表情同时删除引用它的切换事件，保留图片资源。</div>
+        <div id="character-event-fields" class="row"><label for="event-select">切换事件</label><select id="event-select" disabled></select><br><label for="event-frame">帧</label><input id="event-frame" type="number" min="0" step="1" value="0" disabled><button id="event-current" type="button" disabled>使用当前帧</button><br><label for="event-expression">切换到</label><select id="event-expression" disabled></select></div>
+        <div id="character-event-actions" class="row"><button id="event-add" type="button" disabled>新增事件</button><button id="event-apply" type="button" disabled>应用事件</button><button id="event-delete" type="button" disabled>删除事件</button></div>
+        <div id="character-event-help" class="muted">事件从指定帧起生效；同一角色同一帧只能有一个事件，不会自动替换。首个事件之前及“基础立绘”事件之后使用基础立绘。</div>
+      </fieldset>
+      <div id="image-info" class="muted"></div>
+      <div class="row">X <input id="x" type="number" disabled> Y <input id="y" type="number" disabled><button id="move" disabled>应用坐标</button></div>
+      <button id="character-apply" type="button" disabled>应用角色（含坐标）</button>
+    </fieldset>
+    <fieldset><legend>场景演出参数</legend><div id="scene-performance-editor-host"></div><p class="muted">角色范围仅 opacity 联动；既有位置、显隐、表情帧仍绝对定位。标题不自动缩字；溢出可保存，但须调整后才能提交标题或导出。</p></fieldset>
+    <p class="muted">完整文本先排版，再隐藏尾部字符。</p>
+    <p class="muted">工程迁移请携带工程文件与素材。正式保存与自动恢复相互独立；未提交代码草稿不会自动应用到工程。</p>
+    <p id="recovery-status" class="muted" role="status" aria-live="polite">自动恢复：修改后空闲5秒写入，持续编辑最长15秒触发；不等同于正式保存工程。恢复的代码草稿不会自动应用。</p>
+    <pre id="log"></pre>
+  </aside>
+</div>
+<script src="../core/character-definitions.cjs"></script>
+<script src="../core/character-rows.cjs"></script>
+<script src="text-revealer.js"></script>
+<script src="portrait-compositor.js"></script>
+<script src="component-renderer.js"></script>
+<script src="../core/title-style.cjs"></script>
+<script src="title-layout.js"></script>
+<script src="video-renderer.js"></script>
+<script src="scene-renderer.js"></script>
+<script src="../core/audio-envelope.cjs"></script>
+<script src="../core/video-audio-policy.cjs"></script>
+<script src="playback.js"></script>
+<script src="timeline.js"></script><script src="code-editor.js"></script>
+<script src="editor-layout.js"></script>
+<script src="asset-library.js"></script>
+<script src="timeline-drop.js"></script>
+<script src="s3-drop.js"></script>
+<link rel="stylesheet" href="media-drop.css">
+<script src="media-drop.js"></script>
+<script src="background-editor.js"></script>
+<link rel="stylesheet" href="component-editor.css">
+<script src="voice-clip-editor.js"></script>
+<script src="component-authoring-editor.js"></script>
+<script src="component-editor.js"></script>
+<link rel="stylesheet" href="character-library-editor.css">
+<script src="character-library-editor.js"></script>
+<script src="text-import-editor.js"></script>
+<script src="text-layout.js"></script>
+<script src="script-generation-pagination.js"></script>
+<script src="script-preflight-editor.js"></script>
+<script src="external-file-drop.js"></script>
+<script src="character-clip-editor.js"></script>
+<script src="character-performance-editor.js"></script>
+<script src="timeline-item-editor.js"></script>
+<script src="character-row-editor.js"></script>
+<script src="character-event-sublanes.js"></script>
+<script src="timeline-snap.js"></script>
+<script src="dialogue-reading-editor.js"></script>
+<script src="scene-performance-editor.js"></script>
+<script src="preview.js"></script>
+<script src="reading-settings.js"></script>
+</html>

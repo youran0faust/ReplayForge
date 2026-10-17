@@ -1,0 +1,85 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {parseScript:p}=require('./script-parser.cjs');
+const errors=r=>r.diagnostics.filter(d=>d.severity==='error');
+const has=(r,c)=>assert.ok(r.diagnostics.some(d=>d.code===c),JSON.stringify(r));
+const cases=[
+['empty',()=>assert.deepEqual(p(''),{version:1,nodes:[],diagnostics:[]})],
+['invalid input',()=>has(p(null),'INVALID_INPUT')],
+['invalid options',()=>has(p('',null),'INVALID_OPTIONS')],
+['invalid characters',()=>has(p('',{characters:[{}]}),'INVALID_CHARACTERS')],
+['dialogue defaults',()=>assert.deepEqual(p('小窗：你好').nodes[0],{id:'line-1',type:'dialogue',line:1,column:1,raw:'小窗：你好',speaker:'小窗',expression:null,text:'你好'})],
+['English expression markers',()=>{const n=p(' 小窗 [ 微笑 ] : hi  ').nodes[0];assert.equal(n.expression,'微笑');assert.equal(n.text,' hi  ');assert.equal(n.column,2);}],
+['fullwidth expression',()=>assert.equal(p('小窗［微笑］：正文').nodes[0].expression,'微笑')],
+['expression resets',()=>assert.equal(p('小窗[笑]：a\n小窗：b').nodes[1].expression,null)],
+['blank no nodes',()=>{const r=p('小窗：a\n\n续行');assert.equal(r.nodes.length,1);assert.equal(r.nodes[0].text,'a\n续行');}],
+['comments continuation',()=>{const r=p('小窗：a\n//note\n续行');assert.equal(r.nodes[0].text,'a\n续行');assert.equal(r.nodes[1].type,'comment');assert.equal(r.nodes[0].raw,'小窗：a\n//note\n续行');}],
+['inline comment body',()=>assert.equal(p('小窗：a //c').nodes[0].text,'a //c')],
+['body punctuation',()=>assert.equal(p('小窗：@#（轻轻笑）').nodes[0].text,'@#（轻轻笑）')],
+['escapes',()=>assert.equal(p('小窗：a\n\\@背景 x.png\n\\旅人：不要\n\\#标题\n\\//注释\n\\\\slash').nodes[0].text,'a\n@背景 x.png\n旅人：不要\n#标题\n//注释\n\\slash')],
+['orphan escaped',()=>has(p('\\@hello'),'ORPHAN_TEXT')],
+['heading boundary',()=>{const r=p('小窗：a\n#标题\n##节\n文本');assert.deepEqual(r.nodes.map(n=>n.type),['dialogue','title','section']);assert.equal(r.nodes[2].level,2);has(r,'ORPHAN_TEXT');assert(!r.diagnostics.some(d=>d.code==='PARSE_ONLY_FEATURE'));}],
+['command boundary',()=>has(p('小窗：a\n@停顿 1秒\n续行'),'ORPHAN_TEXT')],
+['unknown command location',()=>{const d=p('\n  @不存在 x').diagnostics[0];assert.equal(d.code,'UNKNOWN_COMMAND');assert.equal(d.line,2);assert.equal(d.column,3);}],
+['unknown character narrator',()=>{const r=p('陌生人：a\n旁白：b\n@出场 陌生人',{characters:[]});assert.equal(errors(r).length,2);assert.ok(errors(r).every(d=>d.code==='UNKNOWN_CHARACTER'));}],
+['characters optional',()=>assert.equal(errors(p('陌生人：a')).length,0)],
+['quoted filenames',()=>assert.equal(p('@背景 "学校/教室 黄昏(版)，v1.png"').nodes[0].args.文件,'学校/教室 黄昏(版)，v1.png')],
+['quoted escapes',()=>assert.equal(p('@背景 "folder\\\\a\\\"b.png"').nodes[0].args.文件,'folder\\a"b.png')],
+['invalid escape',()=>has(p('@背景 "a\\q.png"'),'INVALID_ESCAPE')],
+['unclosed quote',()=>has(p('@背景 "a.png'),'UNCLOSED_QUOTE')],
+['quote separator',()=>has(p('@背景 "a.png"suffix'),'MISSING_SEPARATOR')],
+['Chinese named params',()=>{const r=p('@出场 小窗（位置=双人左，表情=微笑，演出=淡入，时长=0.5秒）');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes[0].args,{角色:'小窗',位置:'双人左',表情:'微笑',演出:'淡入',时长:0.5});}],
+['English params concurrent',()=>assert.deepEqual(p('@移动 小窗(位置=单人中,时长=1s,同时)').nodes[0].args,{角色:'小窗',位置:'单人中',时长:1,同时:true})],
+['fixed shorthand',()=>{const r=p('@移动 小窗 单人中 1秒\n@退场 旅人 淡出 0.5秒');assert.deepEqual(errors(r),[]);assert.equal(r.nodes[1].args.演出,'淡出');assert.equal(r.nodes[1].args.时长,0.5);}],
+['layout context',()=>assert.equal(p('@布局 四人\n@出场 小窗 左内').nodes[1].args.位置,'四人左内')],
+['default layout',()=>assert.equal(p('@出场 小窗 中',{defaultLayout:'三人'}).nodes[0].args.位置,'三人中')],
+['full position no context change',()=>assert.equal(p('@出场 小窗 三人中\n@出场 旅人 左').nodes[1].args.位置,'双人左')],
+['all full positions',()=>{for(const v of ['单人中','双人左','双人右','三人左','三人中','三人右','四人左外','四人左内','四人右内','四人右外'])assert.deepEqual(errors(p('@出场 小窗 '+v)),[]);}],
+['invalid slot',()=>has(p('@出场 小窗 中'),'INVALID_POSITION')],
+['invalid layout',()=>{has(p('@布局 五人'),'INVALID_LAYOUT');has(p('',{defaultLayout:'五人'}),'INVALID_LAYOUT');}],
+['no position allocation',()=>assert.deepEqual(p('@出场 小窗').nodes[0].args,{角色:'小窗'})],
+['coordinate normalize',()=>assert.deepEqual(p('@出场 小窗(位置=坐标,x=25％,y=540像素)').nodes[0].args,{角色:'小窗',位置:'坐标',x:{value:25,unit:'%'},y:{value:540,unit:'px'}})],
+['coordinate invalid',()=>{has(p('@出场 小窗(位置=坐标,x=25)'),'INVALID_COORDINATE');has(p('@出场 小窗(位置=坐标,x=25%)'),'MISSING_COORDINATE');has(p('@出场 小窗(x=25%)'),'CONFLICTING_PARAMETERS');}],
+['duration boundaries',()=>{for(const v of ['-1秒','NaNs','Infinitys','1','1ms','1e3s'])has(p('@停顿 '+v),'INVALID_DURATION');assert.equal(p('@停顿 0秒').nodes[0].args.时长,0);assert.equal(p('@停顿 .5s').nodes[0].args.时长,0.5);}],
+['duplicate',()=>has(p('@移动 小窗 单人中 1秒(时长=2秒)'),'DUPLICATE_PARAMETER')],
+['unsafe unknown key',()=>{has(p('@出场 小窗(__proto__=x)'),'UNKNOWN_PARAMETER');assert.equal({}.x,undefined);}],
+['parameter column',()=>{const d=p('  @停顿 (坏=1)').diagnostics.find(d=>d.code==='UNKNOWN_PARAMETER');assert.equal(d.column,8);assert.equal(d.line,1);}],
+['missing value',()=>{has(p('@出场(角色=)'),'MISSING_VALUE');has(p('@移动 小窗'),'MISSING_PARAMETER');}],
+['bad parentheses',()=>{has(p('@停顿(时长=1秒'),'UNCLOSED_PARENTHESES');has(p('@停顿 1秒)'),'INVALID_PARENTHESES');has(p('@停顿(时长=1秒）'),'MISMATCHED_BRACKETS');has(p('@停顿((时长=1秒))'),'INVALID_PARENTHESES');}],
+['comma trailing',()=>{has(p('@停顿(时长=1秒,)'),'EMPTY_PARAMETER');has(p('@停顿(时长=1秒) x'),'TRAILING_ARGUMENT');}],
+['music stop',()=>{assert.deepEqual(p('@音乐 停止').nodes[0].args,{动作:'停止'});assert.deepEqual(p('@音乐(动作=停止)').nodes[0].args,{动作:'停止'});has(p('@音乐 a.mp3(动作=停止)'),'CONFLICTING_PARAMETERS');}],
+['all commands',()=>{const r=p('@背景 a.png\n@音乐 a.mp3\n@音效 a.wav\n@视频 a.mp4\n@布局 双人\n@出场 小窗\n@移动 小窗 单人中 1s\n@退场 小窗\n@表情 小窗 微笑\n@停顿 1s\n@画面 淡出\n@清字幕\n@对白框 隐藏\n@隐藏对白框\n@显示对白框');assert.equal(r.nodes.length,15);assert.deepEqual(errors(r),[]);assert(!r.diagnostics.some(d=>d.code==='PARSE_ONLY_FEATURE'));}],
+['invalid enums',()=>{has(p('@画面 翻转'),'INVALID_PARAMETER');has(p('@出场 小窗(演出=淡出)'),'INVALID_PARAMETER');has(p('@移动 小窗 单人中(同时=也许)'),'INVALID_PARAMETER');}],
+['bad expression',()=>{has(p('小窗[：a'),'INVALID_DIALOGUE');has(p('小窗[]：a'),'EMPTY_EXPRESSION');has(p('小窗[笑］：a'),'MISMATCHED_BRACKETS');}],
+['BOM CRLF',()=>{const r=p('\uFEFF小窗：a\r\n\r\n//c\r\nb\r\n旅人：c');assert.equal(r.nodes[0].raw,'小窗：a\r\n\r\n//c\r\nb');assert.equal(r.nodes[2].line,5);}],
+['fullwidth at',()=>{const r=p('＠ 停顿 ( 时长 = 1秒 )');assert.deepEqual(errors(r),[]);assert.equal(r.nodes[0].args.时长,1);}],
+['extension required',()=>has(p('@背景 classroom'),'MISSING_EXTENSION')],
+['empty heading',()=>has(p('#'),'EMPTY_HEADING')],
+['never execute',()=>{const r=p('@eval process.exit()\n小窗：${process.exit()}');has(r,'UNKNOWN_COMMAND');assert.equal(r.nodes[1].text,'${process.exit()}');}],
+['location shapes',()=>{const r=p('//c\n#t\n##s\n小窗：x\n@oops');for(const n of r.nodes){assert.equal(typeof n.raw,'string');assert.ok(n.line>0&&n.column>0);}for(const d of r.diagnostics){assert.ok(['error','warning','info'].includes(d.severity));assert.ok(d.code&&d.message&&d.line>0&&d.column>0);}}]
+];
+for(const [name,run] of cases)test(name,run);
+
+const pauseCases=[
+ ['pause defaults retain without extra syntax',()=>{for(const source of ['@停顿 1秒','@停顿(时长=1s)','＠ 停顿 （时长=.5秒）']){const r=p(source);assert.deepEqual(errors(r),[]);assert.equal(r.nodes[0].args.保留,true);assert.equal(typeof r.nodes[0].args.时长,'number');}}],
+ ['pause retain yes',()=>{const r=p('@停顿 1秒 保留=是');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes[0].args,{时长:1,保留:true});}],
+ ['pause retain no',()=>{const r=p('@停顿(时长=0秒,保留=否)');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes[0].args,{时长:0,保留:false});}],
+ ['pause retain English booleans',()=>{for(const value of ['true','false']){const r=p('@停顿 .5s 保留='+value);assert.deepEqual(errors(r),[]);assert.equal(r.nodes[0].args.保留,value==='true');}}],
+ ['pause bare retain',()=>{const r=p('@停顿 1秒 保留');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes[0].args,{时长:1,保留:true});}],
+ ['pause bare retain before duration',()=>{const r=p('@停顿 保留 2秒');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes[0].args,{保留:true,时长:2});}],
+ ['pause named retain before duration',()=>{const r=p('@停顿（保留=是，时长=2秒）');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes[0].args,{保留:true,时长:2});}],
+ ['pause consecutive retain does not leak',()=>{const r=p('@停顿 1秒 保留=是\n@停顿 2秒\n@停顿 3秒 保留=否\n@停顿 4秒 保留\n@停顿 5秒');assert.deepEqual(errors(r),[]);assert.deepEqual(r.nodes.map(n=>n.args.保留),[true,true,false,true,true]);assert.deepEqual(r.nodes.map(n=>n.args.时长),[1,2,3,4,5]);}],
+ ['pause retain rejects truthy coercion',()=>{for(const value of ['1','0','yes','no','TRUE','False','也许','null','undefined']){const r=p('@停顿 1秒 保留='+value);has(r,'INVALID_PARAMETER');assert.equal(r.nodes[0].args.保留,false);}}],
+ ['pause retain empty string rejected',()=>{const r=p('@停顿 1秒 保留=""');has(r,'EMPTY_VALUE');has(r,'INVALID_PARAMETER');assert.equal(r.nodes[0].args.保留,false);}],
+ ['pause retain missing value rejected',()=>{const r=p('@停顿(时长=1秒,保留=)');has(r,'MISSING_VALUE');assert.equal(r.nodes[0].args.保留,true);}],
+ ['pause retain duplicates rejected',()=>{for(const source of ['@停顿 1秒 保留 保留','@停顿 1秒 保留=否 保留','@停顿 1秒 保留 保留=否'])has(p(source),'DUPLICATE_PARAMETER');}],
+ ['pause retain invalid value location',()=>{const r=p('小窗：a\n  @停顿 1秒 保留=也许');const d=r.diagnostics.find(d=>d.code==='INVALID_PARAMETER');assert.equal(d.line,2);assert.equal(d.column,10);assert.equal(r.nodes[1].args.保留,false);}],
+ ['pause retain does not replace required duration',()=>{const r=p('@停顿 保留');has(r,'MISSING_PARAMETER');assert.equal(r.nodes[0].args.保留,true);}],
+ ['pause quoted bare retain not flag',()=>{const r=p('@停顿 1秒 "保留"');has(r,'EXTRA_ARGUMENT');assert.equal(r.nodes[0].args.保留,true);}],
+ ['pause retain scoped to pause',()=>{const r=p('@背景 a.png 保留=是\n@移动 小窗 单人中 同时');has(r,'UNKNOWN_PARAMETER');assert.equal(Object.hasOwn(r.nodes[0].args,'保留'),false);assert.deepEqual(r.nodes[1].args,{角色:'小窗',位置:'单人中',同时:true});}],
+ ['pause retain keeps duration validation',()=>{const r=p('@停顿 -1秒 保留=是');has(r,'INVALID_DURATION');assert.equal(r.nodes[0].args.保留,true);}],
+ ['pause retain preserves dialogue boundaries',()=>{const r=p('小窗：a\n@停顿 1秒 保留=是\n续行\n小窗：b');has(r,'ORPHAN_TEXT');assert.deepEqual(r.nodes.map(n=>n.type),['dialogue','command','dialogue']);assert.equal(r.nodes[0].text,'a');assert.equal(r.nodes[2].text,'b');}]
+];
+for(const [name,run] of pauseCases)test(name,run);
+test('C visual grammar and D video are no longer parse-only',()=>{const r=p('# <b>${literal}</b>\n@出场 小窗 演出=淡入 时长=.5秒 同时\n@退场 小窗 演出=淡出 时长=.5秒\n@背景 a.png 转场=黑屏 时长=1秒\n@画面 淡出 时长=.4秒 同时\n@清字幕\n@对白框 隐藏\n@隐藏对白框\n@显示对白框\n@视频 a.mp4');assert.deepEqual(errors(r),[]);assert.equal(r.nodes[0].text,'<b>${literal}</b>');assert.deepEqual(r.diagnostics.filter(d=>d.code==='PARSE_ONLY_FEATURE').map(d=>d.line),[]);});
+test('C does not expand arbitrary natural language or title options',()=>{has(p('显示对白框'),'ORPHAN_TEXT');has(p('@标题 文本'),'UNKNOWN_COMMAND');has(p('@画面 淡出 持续=1秒'),'UNKNOWN_PARAMETER');assert.equal(p('# title(时长=1秒)').nodes[0].text,'title(时长=1秒)');});

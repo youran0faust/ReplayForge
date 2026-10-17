@@ -1,0 +1,56 @@
+'use strict';
+const {app,dialog}=require('electron'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.join(__dirname,'test-output','expressions-'+require('node:crypto').randomUUID());fs.mkdirSync(root,{recursive:true});
+const file=path.join(root,'project.json');process.env.REPLAY_RECOVERY_DIR=path.join(root,'recovery');app.disableHardwareAcceleration();
+dialog.showSaveDialog=async()=>({canceled:false,filePath:file});dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});
+app.once('browser-window-created',(_,win)=>win.webContents.once('did-finish-load',async()=>{try{
+ const result=await win.webContents.executeJavaScript(`(async()=>{
+  const $=s=>document.querySelector(s), wait=async(p,label)=>{for(let i=0;i<300;i++){if(p())return;await new Promise(r=>setTimeout(r,20))}throw Error('Timed out: '+label)};
+  await wait(()=>$('#character-select').value,'startup');
+  const before=await replay.project(), id=$('#character-select').value, character=before.project.scene.characters.find(c=>c.id===id), images=before.project.resources.filter(r=>r.kind==='image');
+  const altResource=images.find(r=>r.id!==character.resourceId).id;
+  const add=async(name,resourceId)=>{$('#expression-resource').value=resourceId;$('#expression-resource').onchange();$('#expression-name').value=name;await $('#expression-add').onclick();return $('#expression-select').value};
+  const base=await add('基础表情',character.resourceId), alt=await add('切换表情',altResource);
+  const registered=await replay.project();
+  await wait(()=>$('#expression-preview img')?.naturalWidth>0,'candidate decode');
+  const candidateSrc=$('#expression-preview img').src, candidateDimensions=[$('#expression-preview img').naturalWidth,$('#expression-preview img').naturalHeight], candidateInfo=$('#expression-preview-info').textContent;
+  const addEvent=async(f,expressionId)=>{$('#event-frame').value=f;$('#event-expression').value=expressionId||'';await $('#event-add').onclick()};
+  await addEvent(30,alt);await addEvent(60,null);const events=await replay.project();
+  const states=[],rendered=[];
+  const expectedBackground=getComputedStyle($('#stage .background')).backgroundImage;
+  for(const f of [29,30,59,60]){
+    $('#frame').value=f;await $('#apply').onclick();await sceneRenderer.ready();
+    states.push((await replay.evaluate(f)).characters.find(c=>c.id===id).resourceId);
+    rendered.push(getComputedStyle(document.querySelector('[data-character-id="'+id+'"]')).backgroundImage);
+  }
+  const independent=$('#expression-preview img').src===candidateSrc && $('#character-preview img').src===registered.resourceUrls[character.resourceId];
+  const revBefore=(await replay.project()).revision;
+  $('#expression-select').value=base;$('#expression-select').onchange();$('#expression-select').value=alt;$('#expression-select').onchange();
+  const readOnly=(await replay.project()).revision===revBefore;
+  await addEvent(30,base);const refused=await replay.project(),duplicateError=$('#log').textContent;
+  $('#event-frame').value=61;$('#event-expression').value='';await $('#event-apply').onclick();const eventEdited=await replay.project();
+  await $('#undo').onclick();
+  await $('#event-delete').onclick();const eventDeleted=await replay.project();await $('#undo').onclick();
+  $('#expression-select').value=alt;$('#expression-select').onchange();$('#expression-name').value='切换表情改名';await $('#expression-apply').onclick();const edited=await replay.project();
+  $('#expression-resource').value=character.resourceId;$('#expression-resource').onchange();await $('#expression-apply').onclick();const resourceEdited=await replay.project();await $('#undo').onclick();
+  await $('#expression-delete').onclick();const unconfirmed=await replay.project();
+  $('#expression-delete-confirm').checked=true;$('#expression-delete-confirm').onchange();await $('#expression-delete').onclick();const deleted=await replay.project();
+  await $('#undo').onclick();const undone=await replay.project();await $('#save').onclick();const saved=await replay.project();await $('#open').onclick();const reopened=await replay.project();
+  return {id,alt,registered,events,states,rendered,expectedBackground,candidateSrc,candidateDimensions,candidateInfo,independent,readOnly,refused,duplicateError,eventEdited,eventDeleted,edited,resourceEdited,unconfirmed,deleted,undone,saved,reopened,resourceIds:{base:character.resourceId,alt:altResource}};
+ })()`);
+ const character=packet=>packet.project.scene.characters.find(c=>c.id===result.id);
+ assert.equal(character(result.registered).expressions.length,2);
+ assert.deepEqual(result.states,[result.resourceIds.base,result.resourceIds.alt,result.resourceIds.alt,result.resourceIds.base]);
+ assert.equal(result.rendered[1],result.expectedBackground);
+ assert.notEqual(result.rendered[0],'none');assert.notEqual(result.rendered[1],'none');assert.notEqual(result.rendered[0],result.rendered[1]);assert.equal(result.rendered[1],result.rendered[2]);assert.equal(result.rendered[0],result.rendered[3]);
+ assert.equal(result.candidateSrc,result.registered.resourceUrls[result.resourceIds.alt]);assert.ok(result.candidateDimensions.every(n=>n>0));assert.ok(result.candidateInfo.includes(result.candidateDimensions.join(' × ')));assert.ok(result.independent&&result.readOnly);
+ assert.deepEqual(result.refused.project,result.events.project);assert.equal(result.refused.revision,result.events.revision);assert.ok(result.duplicateError.includes('错误'));
+ assert.ok(character(result.eventEdited).expressionEvents.some(e=>e.frame===61));assert.equal(character(result.eventDeleted).expressionEvents.length,1);
+ assert.equal(character(result.resourceEdited).expressions.find(e=>e.id===result.alt).resourceId,result.resourceIds.base);
+ assert.equal(character(result.edited).expressions.find(e=>e.id===result.alt).name,'切换表情改名');assert.deepEqual(result.unconfirmed.project,result.edited.project);
+ assert.equal(character(result.deleted).expressions.some(e=>e.id===result.alt),false);assert.equal(character(result.deleted).expressionEvents.length,1);
+ assert.deepEqual(result.undone.project,result.edited.project);assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')).project,result.saved.project);assert.deepEqual(result.reopened.project,result.saved.project);
+ const report={status:'PASS',chooser:'native save/open chooser results stubbed; real portable save/reopen',checks:['two existing image expressions','exact frame transitions and rendered background images','candidate intrinsic dimensions and base inspector independence','read-only selection','duplicate frame refusal','event edit/delete undo','rename expression','confirmed cascade delete','undo save reopen']};
+ fs.writeFileSync(path.join(__dirname,'test-output/gui-expressions.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(0);
+}catch(error){console.error(error);app.exit(1)}}));
+setTimeout(()=>{console.error('Expressions GUI test timed out');app.exit(1)},60000).unref();require('./main.cjs');const profile=path.join(root,'profile');fs.mkdirSync(profile,{recursive:true});app.setPath('userData',profile);app.setPath('sessionData',profile);

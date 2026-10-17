@@ -1,0 +1,100 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {createHash}=require('node:crypto');
+const {parseScript}=require('./script-parser.cjs');
+const {createSourceRecord}=require('./script-source-record.cjs');
+const {prepareReturnPackage,prepareReturnPackageVerified,exportReturnPackage,readReturnMap}=require('./script-return-package.cjs');
+function videoReturnFixture(t,audio){const f=fixture(t),p=f.project,logical='视频/movie.mp4',id='asset_'+sha(logical).slice(0,24),vb=Buffer.from('mock managed mp4 bytes');p.resources.push({id,kind:'video',path:'assets/movie.mp4',mime:'video/mp4',width:960,height:540,fps:30,frameCount:30,normalizationVersion:1});p.scene.videoClips=[{id:'vc',resourceId:id,startFrame:30,endFrame:60}];p.scene.durationFrames=60;const mappings=[{resourceId:id,category:'video',relativePath:logical,hash:sha(vb)}];fs.writeFileSync(path.join(f.projectRoot,'assets/movie.mp4'),vb);if(audio){const owner=p.resources[0],aid='video-audio_'+sha(id).slice(0,24),b=Buffer.alloc(44+48000*4);b.write('RIFF');b.writeUInt32LE(b.length-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(2,22);b.writeUInt32LE(48000,24);b.writeUInt32LE(192000,28);b.writeUInt16LE(4,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(b.length-44,40);owner.audioResourceId=aid;p.resources.push({id:aid,kind:'audio',path:'assets/derived.wav',mime:'audio/wav',sampleRate:48000,channels:2,bitsPerSample:16,durationSamples:48000});fs.writeFileSync(path.join(f.projectRoot,'assets/derived.wav'),b);mappings.push({resourceId:aid,category:'videoAudio',relativePath:'video-audio_'+sha(id)+'.wav',hash:sha(b)});}const text='旁白：原文\n@视频 movie.mp4',config={version:1,characters:[]},report=parseScript(text,config);report.bindings=[{nodeId:'line-1',status:'unvoiced',resourceId:null,textBaseline:'原文'}];p.scriptSource=createSourceRecord({text,config,report,sourceMap:{'line-1':{objects:[{type:'dialogue',id:'d'}]},'line-2':{objects:[{type:'videoClip',id:'vc'}]}},project:p,mediaMappings:mappings});f.verifyManagedVideo=async({sourceFile,expected,check})=>{await check();assert.equal(sha(fs.readFileSync(sourceFile)),expected.hash);return {...expected,mime:'video/mp4'};};return f;}
+for(const audio of [false,true])test('v3 verified legacy upgrade and two export rounds '+audio,async t=>{const f=videoReturnFixture(t,audio),before=structuredClone(f.project);assert.throws(()=>prepareReturnPackage(f.project),{code:'VIDEO_RETURN_UNSUPPORTED'});const prep=await prepareReturnPackageVerified(f);assert.equal(prep.source.version,3);assert.equal(prep.source.mediaMappings.find(m=>m.category==='video').videoNormalization.original,null);assert(prep.losses.some(l=>l.code==='VIDEO_MAP_REQUIRED'));assert.deepEqual(f.project,before);const one=await exportReturnPackage(f),map=readReturnMap(one.mapFile);assert.equal(map.version,3);for(const m of map.source.mediaMappings){const file=path.join(one.root,'素材',require('./script-audio-provenance.cjs').physicalMappingPath(m));assert.equal(sha(fs.readFileSync(file)),m.hash);}const again=await exportReturnPackage({...f,project:{...f.project,scriptSource:map.source}});assert.deepEqual(readReturnMap(again.mapFile).source.mediaMappings,map.source.mediaMappings);assert.deepEqual(f.project,before);});
+const sha=b=>createHash('sha256').update(b).digest('hex');
+function fixture(t,{voice=false}={}){
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'return-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const projectRoot=path.join(root,'project'),outputParent=path.join(root,'output');fs.mkdirSync(projectRoot);fs.mkdirSync(outputParent);fs.mkdirSync(path.join(projectRoot,'assets'));
+ const bytes=Buffer.from('original media bytes'),resource={id:'v',kind:'audio',path:'assets/original.wav',sampleRate:48000,channels:1,bitsPerSample:16,durationSamples:48000};
+ const d={id:'d',speakerId:'narrator',startFrame:0,endFrame:30,displayUntilFrame:30,revealFrames:1,text:{'zh-CN':'原文'},voiceClips:voice?[{id:'clip',resourceId:'v',sampleRate:48000,durationSamples:48000,sourceOffsetSamples:0,binding:{dialogueId:'d',mode:'follow',followOffsetFrames:0}}]:[]};
+ const project={schemaVersion:4,id:'p',locale:'zh-CN',design:{width:960,height:540,fps:30},resources:voice?[resource]:[],characterDefinitions:[],scene:{durationFrames:30,characters:[],dialogues:[d]}};
+ const text='旁白：原文',config={version:1,characters:[]},report=parseScript(text);report.bindings=[{nodeId:'line-1',status:voice?'manual':'unvoiced',resourceId:voice?'v':null,textBaseline:'原文'}];
+ const mediaMappings=voice?[{resourceId:'v',category:'voice',relativePath:'配音/原名/旁白 001.wav',hash:sha(bytes)}]:[];
+ project.scriptSource=createSourceRecord({text,config,report,sourceMap:{'line-1':{objects:[{type:'dialogue',id:'d'},...(voice?[{type:'voiceClip',id:'clip'}]:[])]}},project,mediaMappings});
+ fs.writeFileSync(path.join(projectRoot,resource.path),bytes);return {root,projectRoot,outputParent,project,bytes};
+}
+test('legal video move rebases actual timing without guessing new topology',async t=>{const f=videoReturnFixture(t,true);f.project.scene.videoClips[0].startFrame=40;f.project.scene.videoClips[0].endFrame=70;f.project.scene.durationFrames=70;const prepared=await prepareReturnPackageVerified(f);assert.equal(prepared.source.baselineProject.scene.videoClips[0].startFrame,40);assert.equal(prepared.source.baselineProject.scene.videoClips[0].endFrame,70);const out=await exportReturnPackage(f);assert.equal(readReturnMap(out.mapFile).source.baselineProject.scene.videoClips[0].startFrame,40);});
+test('legacy source2 with compressed audio upgrades video without losing audio provenance',async t=>{const f=videoReturnFixture(t,false),p=f.project,logical='配音/NAR_001.ogg',id='asset_'+sha(logical).slice(0,24),r={id,kind:'audio',path:'assets/audio.wav',mime:'audio/wav',sampleRate:48000,channels:1,bitsPerSample:16,durationSamples:48000},m={resourceId:id,category:'voice',relativePath:logical,hash:sha('unused'),audioNormalization:{version:1,original:{sha256:sha('original'),bytes:8,container:'ogg',codec:'vorbis'},managedRelativePath:require('./script-audio-provenance.cjs').managedAudioPath('voice',id),mime:'audio/wav',sampleRate:48000,channels:1,bitsPerSample:16,durationSamples:48000,normalizationVersion:1}};p.resources.push(r);p.scriptSource.baselineProject.resources.push(structuredClone(r));p.scriptSource.mediaMappings.push(m);p.scriptSource.version=2;assert.deepEqual(require('./script-source-record.cjs').validateSourceRecord(p.scriptSource),[]);const prepared=await prepareReturnPackageVerified(f);assert.equal(prepared.source.version,3);assert.deepEqual(prepared.source.mediaMappings.find(x=>x.resourceId===id),m);});
+test('verified video rejects tampering, topology and failing verifier without publishing',async t=>{const f=videoReturnFixture(t,true);await assert.rejects(exportReturnPackage({...f,verifyManagedVideo:async()=>{throw Error('mock codec reject');}}),{code:'RETURN_EXPORT_FAILED'});fs.writeFileSync(path.join(f.projectRoot,'assets/derived.wav'),'bad');await assert.rejects(exportReturnPackage(f));assert.deepEqual(fs.readdirSync(f.outputParent),[]);const p=structuredClone(f.project);p.scene.videoClips[0].id='unknown-new';await assert.rejects(prepareReturnPackageVerified({...f,project:p}),{code:'VIDEO_TOPOLOGY_CHANGED'});});
+test('video covering dialogue start preserves prior voiced review state without clips',async t=>{const f=videoReturnFixture(t,false),p=f.project,r={id:'voice',kind:'audio',path:'assets/voice.wav',sampleRate:48000,channels:1,bitsPerSample:16,durationSamples:48000};p.resources.push(r);p.scene.videoClips[0].startFrame=0;p.scene.videoClips[0].endFrame=30;const s=p.scriptSource;s.baselineProject=structuredClone({...p,scriptSource:undefined});delete s.baselineProject.scriptSource;s.mediaMappings.push({resourceId:'voice',category:'voice',relativePath:'配音/NAR_001.wav',hash:sha('v')});s.bindings[0]={nodeId:'line-1',status:'manual',resourceId:'voice',textBaseline:'原文'};assert.deepEqual(require('./script-source-record.cjs').validateSourceRecord(s),[]);const ready=await prepareReturnPackageVerified(f);assert.equal(ready.source.bindings[0].resourceId,'voice');assert.equal(ready.source.bindings[0].status,'manual');p.scene.dialogues[0].text['zh-CN']='改词';const changed=await prepareReturnPackageVerified(f);assert.equal(changed.source.bindings[0].status,'reviewRequired');assert.equal(changed.source.bindings[0].textBaseline,'原文');});
+test('strict source3 rejects missing derived normalization, unknown fields and owner',async t=>{const f=videoReturnFixture(t,true),s=(await prepareReturnPackageVerified(f)).source,validate=require('./script-source-record.cjs').validateSourceRecord;for(const change of [x=>delete x.mediaMappings.find(m=>m.category==='videoAudio').videoAudioNormalization,x=>x.mediaMappings.find(m=>m.category==='video').videoNormalization.extra=true,x=>x.mediaMappings.find(m=>m.category==='videoAudio').videoAudioNormalization.ownerResourceId='asset_'+'0'.repeat(24),x=>x.version=2,x=>x.mediaMappings.find(m=>m.category==='video').videoNormalization.original={sha256:'a'.repeat(64),bytes:1,container:'mp4',path:'unsafe'}]){const bad=structuredClone(s);change(bad);assert(validate(bad).length);}assert.deepEqual(validate(s),[]);});
+for(const location of ['resource','clip','baseline'])test('D video return explicitly refused before filesystem writes '+location,async t=>{const f=fixture(t);if(location==='resource')f.project.resources.push({id:'video',kind:'video',path:'assets/video.mp4'});if(location==='clip')f.project.scene.videoClips=[{id:'vc'}];if(location==='baseline')f.project.scriptSource.baselineProject.resources.push({id:'video',kind:'video'});const before=structuredClone(f.project);assert.throws(()=>prepareReturnPackage(f.project),e=>e.code==='VIDEO_RETURN_UNSUPPORTED'&&e.message.includes('保留原工程'));await assert.rejects(exportReturnPackage(f),e=>['VIDEO_RETURN_UNSUPPORTED','SOURCE_REQUIRED','RESOURCE_UNMAPPED','SOURCE_REQUIRED'].includes(e.code));assert.deepEqual(fs.readdirSync(f.outputParent),[]);assert.deepEqual(f.project,before);});
+test('pure preparation rebases text/current project and keeps stable identity and old voice baseline',t=>{
+ const f=fixture(t,{voice:true});f.project.scene.dialogues[0].text['zh-CN']='改词';const before=structuredClone(f.project),r=prepareReturnPackage(f.project);
+ assert.equal(r.text,'旁白：改词');assert.equal(r.source.text,r.text);assert.equal(r.source.bindings[0].textBaseline,'原文');assert.equal(r.source.bindings[0].status,'manual');assert.equal(r.source.nodes[0].stableId,before.scriptSource.nodes[0].stableId);assert.equal(r.source.baselineProject.scriptSource,undefined);assert.equal(r.source.baselineProject.scene.dialogues[0].text['zh-CN'],'改词');assert.deepEqual(f.project,before);
+});
+test('character rename updates config by definition identity and rejects name collisions',t=>{
+ const f=fixture(t),p=f.project;delete p.scriptSource;p.characterDefinitions=[{id:'hero',name:'旧名',color:'#ffffff'},{id:'other',name:'乙',color:'#ffffff'}];p.scene.dialogues[0].speakerId='hero';
+ const text='旧名：原文',config={version:1,characters:[{name:'旧名',voiceCode:'A'},{name:'乙'}]},report=parseScript(text,config);report.bindings=[{nodeId:'line-1',status:'unvoiced'}];
+ p.scriptSource=createSourceRecord({text,config,report,sourceMap:{'line-1':{objects:[{type:'dialogue',id:'d'},{type:'characterDefinition',id:'hero'},{type:'characterDefinition',id:'other'}]}},project:p,mediaMappings:[]});
+ p.characterDefinitions[0].name='新名';const r=prepareReturnPackage(p);assert.equal(r.text,'新名：原文');assert.equal(r.source.config.characters[0].name,'新名');assert.equal(r.source.config.characters[0].voiceCode,'A');assert.equal(p.scriptSource.config.characters[0].name,'旧名');
+ p.characterDefinitions[0].name='乙';assert.throws(()=>prepareReturnPackage(p),{code:'CONFIG_RENAME_INVALID'});
+});
+test('unmapped expression in exported dialogue is explicitly refused',t=>{
+ const f=fixture(t),p=f.project;delete p.scriptSource;p.characterDefinitions=[{id:'hero',name:'甲',color:'#ffffff'}];p.scene.dialogues[0].speakerId='hero';
+ const text='甲[未知表情]：原文',config={version:1,characters:[{name:'甲',expressions:['正常']}]},report=parseScript(text,config);report.bindings=[{nodeId:'line-1',status:'unvoiced'}];
+ p.scriptSource=createSourceRecord({text,config,report,sourceMap:{'line-1':{objects:[{type:'dialogue',id:'d'},{type:'characterDefinition',id:'hero'}]}},project:p,mediaMappings:[]});
+ assert.throws(()=>prepareReturnPackage(p),{code:'CONFIG_EXPRESSION_UNMAPPED'});
+});
+test('existing narrator voiceCode remains legal and exports voiced narrator',async t=>{
+ const f=fixture(t,{voice:true});f.project.scriptSource.config.characters.push({name:'旁白',voiceCode:'N'});
+ const prepared=prepareReturnPackage(f.project);assert.deepEqual(prepared.source.config.characters,[{name:'旁白',voiceCode:'N'}]);assert.equal(prepared.source.bindings[0].resourceId,'v');
+ const result=await exportReturnPackage(f);assert.deepEqual(readReturnMap(result.mapFile).source.config.characters,[{name:'旁白',voiceCode:'N'}]);
+});
+test('invalid current model is rejected instead of snapshot restoration',t=>{const f=fixture(t);f.project.scene.dialogues[0].endFrame=-1;assert.throws(()=>prepareReturnPackage(f.project),{code:'PROJECT_INVALID'});});
+test('zero/one clips derive current bindings rather than stale source bindings',t=>{
+ const f=fixture(t,{voice:true});f.project.scene.dialogues[0].voiceClips=[];const r=prepareReturnPackage(f.project);assert.equal(r.source.bindings[0].status,'unvoiced');assert.equal(r.source.bindings[0].resourceId,null);assert(!r.source.nodes[0].objects.some(o=>o.type==='voiceClip'));
+});
+test('silent edited dialogue preserves old unvoiced/reviewRequired decision and text baseline',async t=>{
+ for(const status of ['unvoiced','reviewRequired'])for(const explicitBaseline of [true,false]){
+  const f=fixture(t),binding=f.project.scriptSource.bindings[0];binding.status=status;
+  if(!explicitBaseline)delete binding.textBaseline;
+  f.project.scene.dialogues[0].text['zh-CN']='修改后的无声正文';
+  const before=structuredClone(f.project),prepared=prepareReturnPackage(f.project),b=prepared.source.bindings[0];
+  assert.equal(b.status,status);assert.equal(b.resourceId,null);assert.equal(b.textBaseline,'原文');assert.equal(prepared.source.text,'旁白：修改后的无声正文');assert.deepEqual(f.project,before);
+  const result=await exportReturnPackage(f),saved=readReturnMap(result.mapFile).source.bindings[0];assert.deepEqual(saved,b);
+ }
+});
+test('multiple clips list loss but cannot deliver a return package',async t=>{
+ const f=fixture(t,{voice:true});f.project.scene.dialogues[0].voiceClips.push({...structuredClone(f.project.scene.dialogues[0].voiceClips[0]),id:'clip2'});
+ const r=prepareReturnPackage(f.project);assert.equal(r.source,null);assert(r.losses.some(l=>l.code==='MULTIPLE_VOICE_CLIPS'));await assert.rejects(exportReturnPackage(f),{code:'MULTIPLE_VOICE_CLIPS'});assert.deepEqual(fs.readdirSync(f.outputParent),[]);
+});
+test('atomic independent package preserves full semantic path, bytes and source hashes',async t=>{
+ const f=fixture(t,{voice:true}),before=JSON.stringify(f.project),r=await exportReturnPackage(f);
+ assert.equal(fs.readFileSync(r.textFile,'utf8'),'旁白：原文');assert.deepEqual(fs.readFileSync(path.join(r.root,'素材/配音/原名/旁白 001.wav')),f.bytes);
+ const map=readReturnMap(r.mapFile);assert.equal(map.format,'replay-script-return');assert.equal(map.source.mediaMappings[0].relativePath,'配音/原名/旁白 001.wav');assert.equal(map.source.mediaMappings[0].hash,sha(f.bytes));assert.equal(JSON.stringify(f.project),before);assert.deepEqual(fs.readFileSync(path.join(f.projectRoot,'assets/original.wav')),f.bytes);assert(fs.existsSync(path.join(r.root,'config.json')));assert(!fs.readdirSync(f.outputParent).some(n=>n.startsWith('.')));
+ const again=await exportReturnPackage(f);assert.notEqual(again.root,r.root);
+});
+test('unknown current resources fail explicitly',t=>{const f=fixture(t);f.project.resources.push({id:'new',kind:'image',path:'new.png'});assert.throws(()=>prepareReturnPackage(f.project),{code:'RESOURCE_UNMAPPED'});});
+test('media hash mismatch never silently updates the map',async t=>{const f=fixture(t,{voice:true});fs.writeFileSync(path.join(f.projectRoot,'assets/original.wav'),'changed');await assert.rejects(exportReturnPackage(f),{code:'MEDIA_HASH_MISMATCH'});assert.deepEqual(fs.readdirSync(f.outputParent),[]);});
+test('unsafe current resource path is rejected before reading',t=>{const f=fixture(t,{voice:true});f.project.resources[0].path='../outside.wav';assert.throws(()=>prepareReturnPackage(f.project),{code:'PATH_UNSAFE'});});
+test('output cannot overlap original project or its ancestor',async t=>{const f=fixture(t);for(const outputParent of [f.projectRoot,f.root])await assert.rejects(exportReturnPackage({...f,outputParent}),{code:'OUTPUT_UNSAFE'});});
+test('cancellation after staging starts removes only own staging',async t=>{
+ const f=fixture(t,{voice:true}),keep=path.join(f.outputParent,'keep');fs.mkdirSync(keep);fs.writeFileSync(path.join(keep,'sentinel'),'keep');
+ await assert.rejects(exportReturnPackage({...f,check:async()=>{if(fs.readdirSync(f.outputParent).some(n=>n.startsWith('.replay-return-staging-')))throw Error('cancel');}}),{code:'RETURN_CANCELLED'});
+ assert.deepEqual(fs.readdirSync(f.outputParent),['keep']);assert.equal(fs.readFileSync(path.join(keep,'sentinel'),'utf8'),'keep');
+});
+test('final checkpoint catches source mutation and cleans staging',async t=>{
+ const f=fixture(t,{voice:true});let changed=false;
+ await assert.rejects(exportReturnPackage({...f,check:async()=>{if(!changed&&fs.readdirSync(f.outputParent).some(n=>n.startsWith('.replay-return-staging-'))){changed=true;fs.writeFileSync(path.join(f.projectRoot,'assets/original.wav'),'changed');}}}),{code:'MEDIA_CHANGED'});assert.deepEqual(fs.readdirSync(f.outputParent),[]);
+});
+test('strict sidecar rejects unknown versions/fields/source/losses, accepts inert paths without opening them',t=>{
+ const f=fixture(t),prepared=prepareReturnPackage(f.project),valid={format:'replay-script-return',version:1,source:prepared.source,losses:[]},file=path.join(f.root,'map.json');
+ for(const mutate of [m=>m.version=2,m=>m.extra=true,m=>m.source.extra=true,m=>m.losses=[{code:'LOSS',path:'/',message:'x',execute:'no'}],m=>m.losses='x']){const m=structuredClone(valid);mutate(m);fs.writeFileSync(file,JSON.stringify(m));assert.throws(()=>readReturnMap(file),{code:'RETURN_MAP_INVALID'});}
+ const unsafe=JSON.parse('{"code":"LOSS","path":"/","message":"x","before":{"__proto__":{"polluted":true}}}');
+ fs.writeFileSync(file,JSON.stringify({...valid,losses:[unsafe]}));assert.throws(()=>readReturnMap(file),{code:'RETURN_MAP_INVALID'});
+ let deep={};for(let i=0;i<40;i++)deep={next:deep};fs.writeFileSync(file,JSON.stringify({...valid,losses:[{code:'LOSS',path:'/',message:'x',after:deep}]}));assert.throws(()=>readReturnMap(file),{code:'RETURN_MAP_INVALID'});
+ fs.writeFileSync(file,JSON.stringify(valid));assert.deepEqual(readReturnMap(file),valid);
+ fs.writeFileSync(file,Buffer.from([0xff]));assert.throws(()=>readReturnMap(file),{code:'INVALID_UTF8'});
+ const fd=fs.openSync(file,'w');fs.ftruncateSync(fd,32*1024*1024+1);fs.closeSync(fd);assert.throws(()=>readReturnMap(file),{code:'FILE_TOO_LARGE'});
+});
+test('ancestor junctions are rejected for source, output and map',async t=>{
+ const f=fixture(t),link=path.join(f.root,'alias');try{fs.symlinkSync(f.projectRoot,link,process.platform==='win32'?'junction':'dir');}catch(e){if(['EPERM','EACCES','ENOSYS'].includes(e.code)){t.skip('symlinks unavailable');return;}throw e;}
+ await assert.rejects(exportReturnPackage({...f,projectRoot:link}),{code:'PATH_UNSAFE'});await assert.rejects(exportReturnPackage({...f,outputParent:link}),{code:'PATH_UNSAFE'});
+ fs.writeFileSync(path.join(f.projectRoot,'map.json'),'{}');assert.throws(()=>readReturnMap(path.join(link,'map.json')),{code:'PATH_UNSAFE'});
+});

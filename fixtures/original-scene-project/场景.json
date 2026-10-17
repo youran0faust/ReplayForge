@@ -1,0 +1,184 @@
+{
+  "format": "replay-project",
+  "revision": 0,
+  "project": {
+    "schemaVersion": 1,
+    "id": "original-window-scene",
+    "locale": "zh-CN",
+    "design": {
+      "width": 960,
+      "height": 540,
+      "fps": 30
+    },
+    "resources": [
+      {
+        "id": "background",
+        "kind": "image",
+        "path": "assets/bb81d9e45dab86d0f161d3521f99ecb344242831ae61f59a0a600495a4589062.png"
+      },
+      {
+        "id": "portrait_base",
+        "kind": "image",
+        "path": "assets/8625c9424ecac5b08d8db5e46e92cab9e4521d395ca15b816e980a82766a8cc6.png"
+      },
+      {
+        "id": "expression_calm",
+        "kind": "image",
+        "path": "assets/50138041828f198c87d978257522d8d49765add95056372e33f2959fb0d96dc9.png"
+      },
+      {
+        "id": "expression_smile",
+        "kind": "image",
+        "path": "assets/60e217aa6f9fa6b3f02e9dee85ee7c301bd4efdcf684286c39058db9d97d94f9.png"
+      },
+      {
+        "id": "cue_01",
+        "kind": "audio",
+        "path": "assets/c725b3065581404bd5a7433993bbdbfda9cd4d937448f4b570b3f111339a7138.wav",
+        "sampleRate": 48000,
+        "durationSamples": 192000
+      },
+      {
+        "id": "cue_02",
+        "kind": "audio",
+        "path": "assets/c0517524127cd00fdade373c09c1e6f1a621c30419dec2caf0ef98cb26e334ed.wav",
+        "sampleRate": 48000,
+        "durationSamples": 144000
+      }
+    ],
+    "scene": {
+      "durationFrames": 210,
+      "background": {
+        "kind": "image",
+        "resourceId": "background"
+      },
+      "characters": [
+        {
+          "id": "window_guide",
+          "name": "小窗",
+          "x": 580,
+          "y": 30,
+          "width": 320,
+          "height": 480,
+          "color": "transparent",
+          "visibleFrom": 0,
+          "visibleTo": 210,
+          "resourceId": "portrait_base",
+          "portraitCanvas": {
+            "width": 320,
+            "height": 480
+          },
+          "expressions": [
+            {
+              "id": "calm",
+              "name": "平静",
+              "mode": "overlay",
+              "layers": [
+                {
+                  "id": "face_calm",
+                  "resourceId": "expression_calm",
+                  "x": 100,
+                  "y": 145,
+                  "width": 120,
+                  "height": 70
+                }
+              ]
+            },
+            {
+              "id": "smile",
+              "name": "微笑",
+              "mode": "overlay",
+              "layers": [
+                {
+                  "id": "face_smile",
+                  "resourceId": "expression_smile",
+                  "x": 100,
+                  "y": 145,
+                  "width": 120,
+                  "height": 70
+                }
+              ]
+            }
+          ],
+          "expressionEvents": [
+            {
+              "id": "event_calm",
+              "frame": 0,
+              "expressionId": "calm"
+            },
+            {
+              "id": "event_smile",
+              "frame": 120,
+              "expressionId": "smile"
+            }
+          ]
+        }
+      ],
+      "dialogues": [
+        {
+          "id": "d1",
+          "speakerId": "window_guide",
+          "text": {
+            "zh-CN": "窗外的灯亮起来了。"
+          },
+          "startFrame": 0,
+          "endFrame": 120,
+          "revealFrames": 1,
+          "pages": [
+            {
+              "id": "d1p0",
+              "text": {
+                "zh-CN": "窗外的灯亮起来了。"
+              },
+              "startFrame": 0,
+              "endFrame": 60,
+              "revealFrames": 1
+            },
+            {
+              "id": "d1p1",
+              "text": {
+                "zh-CN": "我们把今天的故事，留在这里。"
+              },
+              "startFrame": 60,
+              "endFrame": 120,
+              "revealFrames": 1
+            }
+          ],
+          "voice": {
+            "resourceId": "cue_01",
+            "sampleRate": 48000,
+            "durationSamples": 192000,
+            "sourceOffsetSamples": 0,
+            "binding": {
+              "dialogueId": "d1",
+              "mode": "follow",
+              "followOffsetFrames": 0
+            }
+          }
+        },
+        {
+          "id": "d2",
+          "speakerId": "window_guide",
+          "text": {
+            "zh-CN": "明天再见。记得带上新的故事。"
+          },
+          "startFrame": 120,
+          "endFrame": 210,
+          "revealFrames": 1,
+          "voice": {
+            "resourceId": "cue_02",
+            "sampleRate": 48000,
+            "durationSamples": 144000,
+            "sourceOffsetSamples": 0,
+            "binding": {
+              "dialogueId": "d2",
+              "mode": "follow",
+              "followOffsetFrames": 0
+            }
+          }
+        }
+      ],
+      "audioTracks": []
+    }
+  }
+}

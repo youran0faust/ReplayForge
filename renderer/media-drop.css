@@ -1,0 +1,13 @@
+.media-drop-ghost {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  padding: 6px 10px;
+  max-width: 240px;
+  border: 1px solid #ffd166;
+  border-radius: 5px;
+  background: #202735;
+  color: #fff0ba;
+  font: 13px/1.5 system-ui, sans-serif;
+  box-shadow: 0 3px 12px #0006;
+}

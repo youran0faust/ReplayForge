@@ -1,0 +1,13 @@
+const assert=require('assert/strict'),fs=require('fs'),path=require('path');
+const {ProjectSession}=require('./session.cjs');
+const p=JSON.parse(fs.readFileSync(path.join(__dirname,'../examples/rain-corridor.json'),'utf8').replace(/^\uFEFF/,''));
+const s=new ProjectSession(p),id=s.addDialogue(),added=s.snapshot();
+assert.equal(added.scene.dialogues.length,2);const d=added.scene.dialogues[1];assert.equal(d.id,id);assert.equal(d.startFrame,180);assert.equal(d.endFrame,270);assert.equal(d.voice,undefined);for(const l of ['zh-CN','ja-JP','en-US'])assert.ok(d.text[l]);
+assert.equal(s.moveDialogue(id,-1),true);assert.deepEqual(s.snapshot().scene.dialogues[0],d);let rev=s.revision;assert.equal(s.moveDialogue(id,-1),false);assert.equal(s.revision,rev);
+s.undo();assert.deepEqual(s.snapshot(),added);s.redo();s.deleteDialogue(id);assert.deepEqual(s.snapshot(),p);s.undo();assert.equal(s.snapshot().scene.dialogues[0].id,id);
+const file=path.join(__dirname,'../test-output/dialogue-list.json');s.save(file);assert.deepEqual(ProjectSession.open(file).snapshot(),s.snapshot());
+const before=s.snapshot();rev=s.revision;assert.throws(()=>s.deleteDialogue('missing'));assert.throws(()=>s.moveDialogue(id,0));assert.deepEqual(s.snapshot(),before);assert.equal(s.revision,rev);
+for(const x of [...s.snapshot().scene.dialogues])s.deleteDialogue(x.id);assert.equal(s.evaluate(0).dialogues.length,0);const fresh=s.addDialogue();assert.equal(s.snapshot().scene.dialogues[0].startFrame,0);assert.notEqual(fresh,id);
+const full=new ProjectSession({...p,scene:{...p.scene,durationFrames:180,characters:p.scene.characters.map(c=>({...c,visibleTo:180}))}});assert.throws(()=>full.addDialogue());assert.equal(full.revision,0);
+const overlap=new ProjectSession(p),second=overlap.addDialogue();overlap.editDialogue(second,{text:'overlap',startFrame:30,endFrame:180,revealFrames:30});assert.equal(overlap.evaluate(60).dialogues[0].id,p.scene.dialogues[0].id);overlap.moveDialogue(second,-1);assert.equal(overlap.evaluate(60).dialogues[0].id,second);
+console.log(JSON.stringify({status:'PASS',checks:['append no voice','all locales','reorder preserves timing','boundary no-op','undo redo','delete all and re-add','save reopen','invalid rollback','full scene rejection']}));

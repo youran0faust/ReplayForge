@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+<title>部件制作模板静态预览，不是P2运行结果</title>
+<rect width="960" height="540" fill="#101823"/>
+<g font-family="Microsoft YaHei, sans-serif">
+<rect x="30" y="24" width="220" height="44" rx="8" fill="#315989" opacity=".9"/>
+<text x="42" y="53" font-size="20" fill="white">第一章 · 窗边</text>
+<text x="480" y="180" text-anchor="middle" font-size="26" fill="#90B8EF">自定义部件制作模板</text>
+<text x="480" y="224" text-anchor="middle" font-size="18" fill="#CEDCF0">静态示意 · 在编辑器“部件”页导入本目录</text>
+<g transform="translate(40 350)">
+<rect y="28" width="880" height="132" rx="16" fill="#17243B" opacity=".94" stroke="#90B8EF" stroke-width="2"/>
+<rect x="22" width="180" height="42" rx="10" fill="#315989" stroke="#90B8EF"/>
+<text x="112" y="29" text-anchor="middle" font-size="20" fill="white">小窗</text>
+<text x="24" y="80" font-size="26" fill="#F0F5FF">这是你制作的对白框。可在部件模式拖动定位。</text>
+<text x="24" y="119" font-size="26" fill="#F0F5FF">对白文字与说话人将绑定真实工程数据。</text>
+</g></g></svg>

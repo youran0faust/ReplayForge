@@ -1,0 +1,11 @@
+node_modules/
+runtime-output/
+user-data/
+test-output/
+tests-output/
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db
+
+测试导出/

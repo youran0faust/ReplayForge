@@ -1,0 +1,20 @@
+'use strict';
+const {app,nativeImage}=require('electron'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const root=path.resolve(__dirname,'../test-output/P2/script-generation-'+crypto.randomUUID());fs.mkdirSync(root,{recursive:true});app.setPath('userData',path.join(root,'profile'));app.disableHardwareAcceleration();
+app.whenReady().then(async()=>{
+ const pack=path.join(root,'source'),out=path.join(root,'output');for(const d of ['角色/小窗','角色/旅人','背景','配音'])fs.mkdirSync(path.join(pack,d),{recursive:true});fs.mkdirSync(out);
+ const img=nativeImage.createFromBitmap(Buffer.from([80,140,220,255]),{width:1,height:1});assert.equal(img.isEmpty(),false);
+ const png=img.resize({width:120,height:180}).toPNG();for(const f of ['角色/小窗/基础.png','角色/小窗/微笑.png','角色/旅人/基础.png','背景/教室.png'])fs.writeFileSync(path.join(pack,f),png);
+ for(const f of ['CHA_001_你终于来了.wav','TRV_001_抱歉让你久等了.wav'])fs.copyFileSync(path.join(__dirname,'examples/script-preflight/素材/配音',f),path.join(pack,'配音',f));
+ const config={version:1,unvoicedDurationSeconds:0.5,characters:[{name:'小窗',voiceCode:'CHA',expressions:['微笑'],defaultExpression:'微笑',image:'小窗/基础.png',expressionImages:{微笑:'小窗/微笑.png'}},{name:'旅人',voiceCode:'TRV',expressions:[],image:'旅人/基础.png'}]};
+ const text='## 基础生成样例\n@背景 教室.png\n@出场 小窗（位置=双人左）\n@出场 旅人（位置=双人右）\n小窗[微笑]：你终于来了。\n旅人：抱歉，让你久等了。\n旁白：两人在教室相遇。\n@退场 小窗\n@退场 旅人\n';
+ const {scanAssets}=require('./core/script-asset-catalog.cjs'),{preflight,textHash}=require('./core/script-preflight.cjs'),{generatePortableScript}=require('./core/script-generation-storage.cjs');
+ const catalog=scanAssets(pack),report=preflight({text,config,catalog,corrections:{version:1,sourceHash:textHash(text),overrides:{'line-7':{status:'unvoiced'}}}});assert.equal(report.ok,true,JSON.stringify(report.diagnostics));
+ const hash=f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex'),sourceHashes=Object.fromEntries(catalog.assets.map(a=>[a.relativePath,hash(path.join(pack,a.relativePath))]));
+ const result=await generatePortableScript({snapshot:{text,config,catalog},report,assetsRoot:pack,outputParent:out,decodeImage:bytes=>{const image=nativeImage.createFromBuffer(bytes);if(image.isEmpty())throw Error('decode');return image.getSize();}});
+ const {openPortable,saveSessionPortable}=require('./core/project-storage.cjs'),{ProjectSession}=require('./core/session.cjs'),{diagnoseAudio}=require('./core/resource-index.cjs'),{compileAudioTimeline}=require('./core/audio-timeline.cjs');const opened=openPortable(result.file),session=new ProjectSession(opened.project),before=session.snapshot();
+ assert.equal(before.schemaVersion,3);assert.equal(before.scene.dialogues.length,3);assert.equal(before.scene.characters.length,2);assert.equal(compileAudioTimeline(before,diagnoseAudio(before,opened.root)).clips.length,2);
+ const first=before.scene.dialogues[0];session.editDialogue(first.id,{text:'修改后台词',startFrame:first.startFrame,endFrame:first.endFrame,revealFrames:first.revealFrames});session.undo();assert.deepEqual(session.snapshot(),before);
+ const saved=saveSessionPortable(session,opened.root,path.join(root,'saved','project.json'));fs.rmSync(pack,{recursive:true});assert.deepEqual(openPortable(saved.file).project,saved.project);assert.equal(diagnoseAudio(saved.project,saved.root).hasErrors,false);
+ const evidence={status:'PASS',root,file:saved.file,projectRoot:saved.root,frames:saved.project.scene.durationFrames,sourceHashes,checks:['nativeImage real PNG decode','real PCM16 sample validation','3 dialogues / 2 voices / 2 editable characters','text edit and exact undo','portable save reopen after deleting isolated source'],limitations:['solid image fixtures, synthetic tones','no advanced effects or full text roundtrip']};fs.writeFileSync(path.join(root,'report.json'),JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));app.exit(0);
+}).catch(e=>{fs.writeFileSync(path.join(root,'report.json'),JSON.stringify({status:'FAIL',root,error:e.stack},null,2));console.error(e);app.exit(1);});

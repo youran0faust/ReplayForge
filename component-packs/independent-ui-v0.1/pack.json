@@ -1,0 +1,19 @@
+{
+  "format": "replay-component-pack", "formatVersion": "0.1",
+  "id": "local.independent-ui", "name": "独立正文、姓名与装饰", "version": "1.0.0",
+  "description": "三个独立定义，可单独放置或多选组合。无图片依赖。",
+  "resources": [],
+  "components": [
+    {"id":"body-only","name":"独立对白正文","kind":"dialogue-ui","roles":["body"],"designSize":{"width":880,"height":132},"scaleMode":"uniform","visibility":"when-active-dialogue","elements":[
+      {"id":"panel","type":"panel","rect":{"x":0,"y":0,"width":880,"height":132},"fill":"#17243B","radius":16,"opacity":0.94},
+      {"id":"body","type":"text","rect":{"x":24,"y":20,"width":832,"height":92},"fontSize":26,"lineHeight":1.5,"color":"#F0F5FF","fontFamily":"Microsoft YaHei","binding":"activeDialogue.text","reveal":"active-dialogue-progress"}
+    ]},
+    {"id":"speaker-only","name":"独立姓名栏","kind":"dialogue-ui","roles":["speaker"],"designSize":{"width":180,"height":44},"scaleMode":"uniform","visibility":"when-active-dialogue","elements":[
+      {"id":"panel","type":"panel","rect":{"x":0,"y":0,"width":180,"height":44},"fill":"#315989","radius":10},
+      {"id":"speaker","type":"text","rect":{"x":12,"y":6,"width":156,"height":32},"fontSize":20,"lineHeight":1.2,"color":"#FFFFFF","fontFamily":"Microsoft YaHei","align":"center","binding":"activeDialogue.speakerName"}
+    ]},
+    {"id":"title","name":"自由标题装饰","kind":"decoration","designSize":{"width":320,"height":64},"scaleMode":"uniform","visibility":"instance-range","elements":[
+      {"id":"title-text","type":"text","rect":{"x":0,"y":0,"width":320,"height":64},"fontSize":28,"lineHeight":1.2,"color":"#FFFFFF","fontFamily":"Microsoft YaHei","text":"自定义标题"}
+    ]}
+  ]
+}

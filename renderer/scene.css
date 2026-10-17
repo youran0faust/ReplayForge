@@ -1,0 +1,24 @@
+.stage { position:relative; flex:none; overflow:hidden; background:#182338; color:#eee; font-family:"Segoe UI",Arial,sans-serif; transform-origin:top left; }
+.stage .background { position:absolute; inset:0; background-size:cover; background-position:center; }
+.stage .characters { position:absolute; inset:0; }
+.stage .char { position:absolute; background-size:contain; background-repeat:no-repeat; background-position:center; display:grid; place-items:center; color:#fff; font-size:26px; }
+.portrait-host { position:relative; overflow:hidden; }
+.portrait-composition { position:absolute; overflow:visible; }
+.portrait-layer { position:absolute; background-repeat:no-repeat; background-position:center; background-size:100% 100%; pointer-events:none; }
+.portrait-base { z-index:0; }
+.portrait-overlay { z-index:1; }
+.stage .dialogue { position:absolute; left:5%; right:5%; bottom:5%; font-size:25px; line-height:1.5; white-space:normal; word-break:normal; overflow-wrap:normal; line-break:strict; }
+/* Reserve border space in layout rather than a DPR-rounded CSS border. */
+.stage .dialogue-body { box-sizing:content-box; min-height:90px; padding:20px; margin:1px; background:#0c1220dd; border:0; outline:1px solid #6f89a8; }
+.stage .dialogue-speaker { position:absolute; left:0; bottom:100%; width:max-content; max-width:100%; box-sizing:border-box; padding:4px 12px; background:#0c1220dd; border:1px solid #6f89a8; font-size:20px; font-weight:600; }
+.stage .dialogue[hidden], .stage .dialogue-body[hidden], .stage .dialogue-speaker[hidden] { display:none; }
+.stage .component-layer { position:absolute; inset:0; z-index:1; isolation:isolate; pointer-events:none; }
+.stage .component-instance { position:absolute; transform-origin:top left; pointer-events:none; }
+.stage .component-element { position:absolute; box-sizing:border-box; }
+.stage .component-image { background-repeat:no-repeat; background-position:center; }
+.stage .component-text { overflow:hidden; white-space:pre-wrap; word-break:normal; overflow-wrap:normal; line-break:strict; }
+.stage .component-text::highlight(replay-hidden-tail) { color:transparent; text-shadow:none; }
+.stage .dialogue-body::highlight(replay-hidden-tail) { color:transparent; text-shadow:none; }
+#character-preview { display:grid; place-items:center; height:180px; margin:8px 0; overflow:hidden; border:1px solid #627083; background:#252d38; color:#aebdcd; text-align:center; }
+#character-preview img { display:block; width:100%; height:100%; min-height:0; object-fit:contain; }
+#character-preview-info { white-space:pre-line; overflow-wrap:anywhere; margin-bottom:8px; }

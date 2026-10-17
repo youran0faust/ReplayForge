@@ -1,0 +1,1 @@
+﻿const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('replay',{project:()=>ipcRenderer.invoke('parity-project'),evaluate:frame=>ipcRenderer.invoke('parity-evaluate',frame),onState:()=>{},move:async()=>{},undo:async()=>{},redo:async()=>{},setLocale:async()=>{},save:async()=>{},exportCurrent:async()=>{}});

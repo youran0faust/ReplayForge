@@ -1,0 +1,10 @@
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+const require=createRequire(import.meta.url);
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const exe=path.join(root,'../p0/node_modules/electron/dist/electron.exe');
+const run=spawnSync(exe,[path.join(root,'export-main.cjs')],{stdio:'inherit'});
+if(run.error)throw run.error;
+process.exitCode=run.status??1;

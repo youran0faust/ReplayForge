@@ -1,0 +1,26 @@
+'use strict';
+// First decode MP4 with ffmpeg -vn -ac 1 -ar 48000 -f s16le export/decoded-mono-48k.pcm.
+// Save ffprobe -show_streams -show_format -of json output in export/ffprobe.json.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const {compileAudioTimeline}=require('./core/audio-timeline.cjs'),{diagnoseAudio}=require('./core/resource-index.cjs');
+const root=path.resolve(process.argv[2]||'test-output/P2/script-b3-real-0b9c0f16-a605-402b-84ff-ce1814b10e03'),out=path.join(root,'export');
+const checks=[],details={},json=f=>JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,'')),hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+const report={status:'FAIL',root,checks,details,limitations:['Automated structural, exact PNG byte, and decoded PCM checks only; no human visual inspection.','Synthetic 440/660 Hz tones, not speech.','AAC boundary spill reported; tone frequency windows exclude 50ms endpoints.','A 440Hz sine has an integer number of periods at the 0.5s page boundary; PCM alone cannot distinguish a phase-identical restart. No duplicated/restarted clip is established by the independently recompiled timeline plus decoded timing.']};
+try{
+ const snapshot=json(path.join(out,'export-snapshot.json')),p=snapshot.project;
+ assert.equal(snapshot.frames,90);assert.equal(p.scene.durationFrames,90);assert.equal(p.design.fps,30);
+ const diag=diagnoseAudio(p,path.join(root,'saved'));assert.equal(diag.hasErrors,false);
+ const timeline=compileAudioTimeline(p,diag);assert.deepEqual(timeline,snapshot.timeline);assert.equal(timeline.clips.length,2);assert.deepEqual(timeline.clips.map(c=>[c.startSamples,c.durationSamples,c.sourceOffsetSamples]),[[0,48000,0],[72000,48000,0]]);
+ assert.equal(new Set(timeline.clips.map(c=>c.clipId)).size,2);assert.equal(p.scene.dialogues.flatMap(d=>d.voiceClips).length,2);assert.equal(timeline.durationSamples,144000);assert.equal(p.scene.dialogues[0].pages.length,2);assert.equal(p.scene.dialogues[0].pages[1].startFrame,15);
+ checks.push('Recompiled timeline equals snapshot: exactly two distinct full 48000-sample voices at samples 0 and 72000; no page duplication.');details.timeline=timeline;
+ const names=fs.readdirSync(path.join(out,'frames')).filter(n=>/^\d{4}\.png$/.test(n)).sort(),frame=f=>fs.readFileSync(path.join(out,'frames',String(f).padStart(4,'0')+'.png'));assert.equal(names.length,90);for(let f=0;f<90;f++)assert.equal(names[f],String(f).padStart(4,'0')+'.png');
+ details.holds=[];for(const [start,end] of [[30,44],[75,89]]){const first=frame(start);for(let f=start+1;f<=end;f++)assert.ok(first.equals(frame(f)),`hold frame ${f} differs from ${start}`);details.holds.push({start,end,sha256:hash(first),identical:true});}
+ assert.ok(!frame(14).equals(frame(15)),'page transition must change frame');details.pageTransition={before:14,after:15,beforeSha256:hash(frame(14)),afterSha256:hash(frame(15))};checks.push('90 sequential PNG frames; holds30..44 and75..89 byte-identical; page boundary14/15 differs.');
+ const pcm=fs.readFileSync(path.join(out,'decoded-mono-48k.pcm'));assert.equal(pcm.length%2,0);const samples=pcm.length/2;assert.ok(samples>=144000&&samples<=145024,'AAC padding limited to one codec frame');
+ function stats(start,end){let sum=0,peak=0,crossings=0,prev=0;const a=Math.round(start*48000),b=Math.round(end*48000);for(let i=a;i<b;i++){const v=pcm.readInt16LE(i*2)/32768;sum+=v*v;peak=Math.max(peak,Math.abs(v));if(i>a&&prev<=0&&v>0)crossings++;prev=v;}return{start,end,count:b-a,rms:Math.sqrt(sum/(b-a)),peak,positiveCrossingHz:crossings/(end-start)};}
+ details.decodedSamples=samples;details.tones=[stats(.05,.45),stats(.55,.95),stats(1.55,2.45)];for(const [i,s] of details.tones.entries()){assert.ok(Math.abs(s.positiveCrossingHz-(i<2?440:660))<5,'tone frequency');assert.ok(s.rms>.04&&s.rms<.25,'tone amplitude');}
+ const boundary=stats(.48,.52);assert.ok(Math.abs(boundary.positiveCrossingHz-440)<30);assert.ok(boundary.rms>.04);details.pageBoundaryAudio=boundary;
+ details.pauses=[stats(1,1.5),stats(2.5,3)];details.pauseInteriors=[stats(1.05,1.45),stats(2.55,2.95)];for(const s of details.pauses)assert.ok(s.rms<.005,'full pause near silence');for(const s of details.pauseInteriors)assert.ok(s.rms<.0001,'interior silence');checks.push('Decoded AAC:440Hz before/after page switch;660Hz second dialogue; near-silent pauses and no extension.');
+ const probe=json(path.join(out,'ffprobe.json')),video=probe.streams.find(s=>s.codec_type==='video'),audio=probe.streams.find(s=>s.codec_type==='audio');assert.equal(video.codec_name,'h264');assert.equal(video.width,960);assert.equal(video.height,540);assert.equal(Number(video.nb_frames),90);assert.equal(audio.codec_name,'aac');assert.equal(Number(audio.sample_rate),48000);assert.equal(audio.channels,2);assert.ok(Math.abs(Number(probe.format.duration)-3)<.001);details.media={video,audio,duration:probe.format.duration,mp4Sha256:hash(fs.readFileSync(path.join(out,'p1-preview.mp4')))};checks.push('ffprobe:H264 960x540/90frames,AAC48k stereo,3.000seconds.');report.status='PASS';
+}catch(e){report.error=e.stack;process.exitCode=1;}
+fs.writeFileSync(path.join(root,'export-verification.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

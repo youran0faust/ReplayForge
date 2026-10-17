@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "defaultLayout": "双人",
+  "unvoicedDurationSeconds": 3,
+  "characters": [
+    {"name":"小窗","voiceCode":"CHA","expressions":["微笑"],"defaultExpression":"微笑"},
+    {"name":"旅人","voiceCode":"TRV","expressions":[]}
+  ]
+}

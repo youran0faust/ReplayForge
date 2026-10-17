@@ -1,0 +1,6 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),{editorMenuTemplate,installEditorContextMenu}=require('./context-menu.cjs');
+
+test('editable native roles obey Chromium permissions',()=>{const t=editorMenuTemplate({isEditable:true,editFlags:{canCopy:true,canPaste:true,canSelectAll:true}});assert.deepEqual(t.filter(x=>x.role).map(x=>x.role),['undo','redo','cut','copy','paste','delete','selectAll']);assert.equal(t.find(x=>x.role==='cut').enabled,false);assert.equal(t.find(x=>x.role==='paste').enabled,true)});
+test('noneditable menu only copies selected text',()=>{assert.deepEqual(editorMenuTemplate({}),[]);const t=editorMenuTemplate({selectionText:'hello',editFlags:{canCopy:true}});assert.equal(t.length,1);assert.equal(t[0].role,'copy')});
+test('native context event binds owner and avoids empty popup',()=>{let callback,popup;const win={isDestroyed:()=>false,webContents:{on(name,fn){assert.equal(name,'context-menu');callback=fn}}};installEditorContextMenu(win,{buildFromTemplate(t){return{popup(o){popup={t,o}}}}});callback({},{});assert.equal(popup,undefined);callback({},{isEditable:true});assert.equal(popup.o.window,win);assert.equal(popup.t[0].role,'undo')});

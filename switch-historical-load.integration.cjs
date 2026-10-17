@@ -1,0 +1,32 @@
+'use strict';
+// Parent-run Electron diagnostic, not npm test. --rounds 1|2; --manifest test-owned closeout manifest.
+// Test composition only. Exact anchors fail on drift. No production file is modified.
+const fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
+if(!process.argv.includes('--rounds'))process.argv.push('--rounds','2');
+if(![1,2].includes(Number(process.argv[process.argv.indexOf('--rounds')+1])))throw Error('Historical rounds must be 1 or 2');
+if(process.argv.includes('--reload-repro'))throw Error('This entry already includes historical artificial reload');
+let source=fs.readFileSync(path.join(__dirname,'switch-stability.integration.cjs'),'utf8');
+function patch(a,b){if(source.split(a).length!==2)throw Error('Harness anchor drift: '+a.slice(0,120));source=source.replace(a,b);}
+patch("let mode='real-open',rounds=20,manifestArg;","let mode='historical-load',rounds=2,manifestArg;");
+patch("'switch-stability-'+crypto.randomUUID()","'switch-historical-load-'+crypto.randomUUID()");
+source=source.replaceAll('120000','300000').replaceAll('120 seconds','300 seconds');
+patch("if(label==='long'){delete p.scriptSource;p.scene.videoClips=[];p.resources=p.resources.filter(r=>r.kind!=='video');p.title='Switch stability long nonvideo';fs.writeFileSync(targetFile,JSON.stringify(data,null,2));}","assert(p.scriptSource&&p.scene.videoClips?.length===4,'Historical full video/source fixture required');");
+patch("videoClips:0,adaptation:'Copied synthetic project only: removed video clips/video resources/scriptSource, retained long timing and ordinary audio'","videoClips:fixtures.long.project.scene.videoClips.length,adaptation:'Complete historical video/resources/source preserved byte-for-byte'");
+patch("save('runtime-hashes.json',",`const construction=path.join(root,'fixtures'),moved=path.join(root,'moved-fixtures');fs.renameSync(construction,moved);for(const label of ['long','short'])fixtures[label].file=path.join(moved,label,path.basename(fixtures[label].file));assert(!fs.existsSync(construction));report.fixtureRelocation={construction,moved,originalsReadOnly:true};
+ save('runtime-hashes.json',`);
+patch("const originalHandle=ipcMain.handle.bind(ipcMain);","const heartbeat=setInterval(()=>event('main-heartbeat',{providerPending,liveDecoders:liveDecoders.size}),1000);heartbeat.unref();const originalHandle=ipcMain.handle.bind(ipcMain);");
+patch("videoProbe:globalThis.__switchVideoProbe,log:","videoProbe:globalThis.__switchVideoProbe,historicalSeek:globalThis.__historicalSeek,log:");
+patch("report.status=status;report.stage=stage;","report.status=status;report.stage=stage;report.historicalScope={fullLongVideoSource:true,selection:'closeout-fixture.selection:547+1 cold',screenshots:24,limitations:'Copied portable fixture relocation and resource URL checks; not repeated original generation, independent reference decoder checks or full original OS history. capturePage used as historical workload, not visual correctness oracle.'};");
+patch("await open('long');for(cycle=0;cycle<rounds;cycle++){const began=Date.now(),short=await open('short'),clip=",`await open('long');for(cycle=0;cycle<rounds;cycle++){
+ const began=Date.now(),selection=require(path.join(__dirname,'closeout-fixture.cjs')).selection(f.long.project);assert.equal(selection.order.length,547,'Historical selection drift');
+ const packet=await step('historical moved long packet',()=>js('replay.project()'));assert.deepEqual(packet.project,f.long.project);for(const r of f.long.project.resources)assert.equal(path.resolve(require('node:url').fileURLToPath(packet.resourceUrls[r.id])),path.resolve(path.dirname(f.long.file),r.path));save('historical-selection.json',selection);
+ await step('historical isolate stage',()=>js("(()=>{pausePlayback();document.body.appendChild(sceneRenderer.stage);const s=document.createElement('style');s.textContent='body > :not(#stage){display:none!important} #stage{position:fixed!important;left:0!important;top:0!important;width:960px!important;height:540px!important;transform:none!important;z-index:99999!important} #component-editor-overlay{display:none!important}';document.head.appendChild(s);return true;})()"));w.setContentSize(960,540);
+ const rows=[],captured=new Set();for(const at of [0,...selection.order]){
+ const q=await step('historical long seek '+at,()=>js('(async()=>{globalThis.__historicalSeek={at:'+at+',phase:"locate",rafCount:0};const start=performance.now(),pulse=()=>{if(globalThis.__historicalSeek.at==='+at+'&&performance.now()-start<11000){globalThis.__historicalSeek.rafCount++;requestAnimationFrame(pulse);}};requestAnimationFrame(pulse);frame.value='+at+';await locate();globalThis.__historicalSeek.phase="ready";await sceneRenderer.ready();globalThis.__historicalSeek.phase="done";return {at:'+at+',ms:performance.now()-start,documentId:current.documentId,stateFrame:current.state?.frame};})()'));rows.push(q);
+ if(selection.screenshots.includes(at)&&!captured.has(at)){await step('historical two RAF '+at,()=>js('(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return true;})()'));const image=await step('historical capturePage '+at,()=>wc.capturePage({x:0,y:0,width:960,height:540}));fs.writeFileSync(path.join(root,'historical-'+cycle+'-'+at+'.png'),image.toPNG());captured.add(at);}save('historical-seeks-'+cycle+'.json',rows);}
+ assert.equal(captured.size,24);event('historical-long-workload-complete',{seeks:547,cold:1,captures:24});
+ chosen=f.short.file;await step('historical transition short preopen',()=>js('(async()=>{pausePlayback();await replay.openProject();return true;})()'));event('historical-short-preopen-complete');artificialLoads++;await step('historical transition short loadFile',()=>w.loadFile(path.join(runtime,'renderer/index.html')));await waitState('historical short after reload',f.short);report.branches.artificialReload='PASS_SO_FAR';
+ const short=await open('short'),clip=`);
+patch("report.branches.realOpen='PASS';if(mode==='reload-repro')","report.branches.artificialReload='PASS';report.branches.realOpen='PASS';if(mode==='reload-repro')");
+// --compose-check checks transformed JS only: no Electron require, GUI, copy, FFmpeg or runtime execution.
+if(process.argv.includes('--compose-check')){new (require('node:vm').Script)(source,{filename:__filename});console.log('Historical composition syntax PASS');}else{const child=new Module(__filename,module);child.filename=__filename;child.paths=module.paths;child._compile(source,__filename);}
