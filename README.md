@@ -112,6 +112,7 @@ ReplayForge 不是独立安装包：需要 Node.js，以及**相邻的运行时�
 
 - [交付使用指南](docs/交付使用指南.md)
 - [最终交付清单与验收门槛](docs/最终交付清单与验收门槛.md)
+- [CHANGELOG.md](CHANGELOG.md)：版本历史
 
 ## License
 

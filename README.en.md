@@ -112,7 +112,9 @@ Delete the project directory to remove it entirely. No registry writes, no servi
 
 - [Delivery guide (中文)](docs/交付使用指南.md)
 - [Acceptance criteria (中文)](docs/最终交付清单与验收门槛.md)
+- [CHANGELOG.md](CHANGELOG.md): version history
 
 ## License
 
 [MIT](LICENSE)
+
